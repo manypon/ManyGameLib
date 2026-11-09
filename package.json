@@ -4,7 +4,7 @@
   "description": "Local Game Lib",
   "author": "manypon",
   "license": "MIT",
-  "repository": "github/manypon/manygamelib
+  "repository": "github:manypon/manygamelib",
   "main": "main.js",
   "private": true,
   "scripts": {
