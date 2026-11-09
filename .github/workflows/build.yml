@@ -1,6 +1,7 @@
 name: Build Electron App
 
 on:
+
   push:
     tags: [ "v*" ]
   workflow_dispatch:
@@ -20,7 +21,8 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-
+        cache: 'npm' 
+       
     - name: Install dependencies
       run: npm install
       env:
@@ -49,7 +51,6 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: ManyGameLib-Build.zip
-
-        tag_name: ${{ github.ref_name }} 
+        tag_name: ${{ github.ref_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
