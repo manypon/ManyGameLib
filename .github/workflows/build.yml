@@ -50,6 +50,6 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: ManyGameLib-Build.zip
-        tag_name: v1.0.1
+        tag_name: v1.0.0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
