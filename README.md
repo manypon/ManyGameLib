@@ -1,67 +1,69 @@
 # ManyGameLib
 
-Локальная библиотека игр для Windows на Electron. Добавляете игру один раз (путь к файлу, иконка, название) и дальше запускаете её из лаунчера.
+[English](README.md) | [Русский](README.ru.md)
 
-## Что нужно
+A local game library for Windows, built with Electron. Add a game once (file path, icon, name) and launch it from the app from then on.
 
-**Node.js** (LTS): https://nodejs.org. Компиляторы и Build Tools не нужны.
+## Requirements
 
-## Запуск
+**Node.js** (LTS): https://nodejs.org. No compilers or build tools needed.
+
+## Run
 
 ```powershell
 npm install
 npm start
 ```
 
-Или двойной клик по `start.bat`: при первом запуске он сам выполнит `npm install`.
+Or double-click `start.bat`: on first launch it runs `npm install` for you.
 
-## Сборка готового приложения
+## Build the app
 
 ```powershell
 npm run build
 ```
 
-Результат: `dist\win-unpacked\ManyGameLib.exe`. Папку `win-unpacked` можно переносить целиком, Node.js для её запуска не нужен.
+Output: `dist\win-unpacked\ManyGameLib.exe`. The whole `win-unpacked` folder can be moved anywhere, and Node.js is not needed to run it.
 
-Если Electron не скачивается (ошибка 504 или сетевая), можно собрать вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а в `resources\app` положите `main.js`, `preload.js`, `package.json`, `ui` и `build`.
+If Electron fails to download (a 504 or other network error), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `package.json`, `ui` and `build` into `resources\app`.
 
-## Как это работает
+## Features
 
-- При первом запуске библиотека пуста, приложение просит добавить первую игру: **путь к игре**, **иконку** (необязательно) и **название** (подставляется из имени файла или папки).
-- Плитки и список, поиск, сортировка, избранное, недавние игры, карточка «Подробнее».
-- **Запуск:** кнопка «Запустить», кнопка на плитке при наведении, двойной клик или правая кнопка мыши.
-- Поддерживаются `.exe`, `.jar` (запускается через Java, она должна быть установлена), ярлыки `.lnk` и `.url`, а также `.bat`, `.cmd`, `.msi`. Любой другой файл откроется программой, назначенной ему в Windows.
-- Игры стартуют в своей папке. Если нужны права администратора, Windows покажет запрос UAC.
-- «Убрать из библиотеки» удаляет только запись, файлы игры не трогаются.
-- Если файл игры переместили или удалили, на плитке появится метка «Файл не найден».
+- On first launch the library is empty and the app asks you to add your first game: **game path**, **icon** (optional) and **name** (taken from the file or folder name by default).
+- Grid and list views, search, sorting, favorites, recent games and a details view.
+- **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu.
+- Supported files: `.exe`, `.jar` (runs through Java, which must be installed), `.lnk` and `.url` shortcuts, plus `.bat`, `.cmd` and `.msi`. Any other file opens with the program Windows has assigned to it.
+- Games start in their own folder. If a game needs administrator rights, Windows shows the UAC prompt.
+- "Remove from library" deletes only the library entry. Your game files are never touched.
+- If a game file is moved or deleted, its tile shows a "File not found" badge.
 
-## Где лежат данные
+## Where your data is stored
 
 `%USERPROFILE%\manypon\manygamelib\`
 
-- `games.json` — список игр
-- `icons\` — копии выбранных иконок (если исходный файл удалят, иконка останется)
-- Если `games.json` повредится, копия сохранится как `games.json.bak`.
+- `games.json`: the list of games
+- `icons\`: copies of the icons you picked (they survive even if the original files are deleted)
+- If `games.json` gets corrupted, a copy is saved as `games.json.bak`.
 
-Чтобы перенести библиотеку на другой компьютер, скопируйте эту папку целиком. Пути к играм в ней абсолютные, поэтому игры должны лежать по тем же путям.
+To move your library to another computer, copy that whole folder. Game paths are absolute, so the games need to be at the same paths there.
 
-Если раньше использовалась версия GameLib (данные в `%APPDATA%\gamelib`), при первом запуске библиотека скопируется в новое место автоматически. Старая папка остаётся нетронутой.
+If you used the earlier GameLib version (data in `%APPDATA%\gamelib`), the library is copied to the new location automatically on first launch. The old folder is left untouched.
 
-## Иконки и обложки
+## Icons and covers
 
-Лучше всего квадрат 512×512 или вертикальная обложка 600×900 (PNG, JPG, WEBP, ICO, BMP, GIF), размер файла до 8 МБ. Картинка обрезается по центру под плитку.
+Best results with a 512×512 square or a 600×900 vertical cover (PNG, JPG, WEBP, ICO, BMP or GIF), up to 8 MB. The image is cropped to fit the tile, centered.
 
-## Структура
+## Project structure
 
 ```
 manygamelib/
-├─ main.js        хранение игр, запуск процессов, диалоги выбора файлов
-├─ preload.js     безопасный мост между интерфейсом и main.js
-├─ ui/            интерфейс (index.html, style.css, app.js)
-├─ build/         иконки приложения
-└─ start.bat      запуск двойным кликом
+├─ main.js        game storage, process launching, file dialogs
+├─ preload.js     safe bridge between the UI and main.js
+├─ ui/            interface (index.html, style.css, app.js)
+├─ build/         app icons
+└─ start.bat      double-click launcher
 ```
 
-## Лицензия
+## License
 
 MIT
