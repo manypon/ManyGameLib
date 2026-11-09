@@ -24,15 +24,18 @@ jobs:
 
     - name: Install dependencies
       run: npm install
-      
+      env:
+        ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
     - name: Ensure Electron binary is downloaded
       run: node node_modules/electron/install.js
+      env:
+        ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
     - name: Build App
       run: npm run build
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
