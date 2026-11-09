@@ -1,6 +1,6 @@
 # ManyGameLib
 
-[English](README.md) | [Русский](README.ru.md)
+[English](README.md) | [Русский](README_RU.md)
 
 A local game library for Windows, built with Electron. Add a game once (file path, icon, name) and launch it from the app from then on.
 
