@@ -21,6 +21,9 @@ jobs:
 
     - name: Install dependencies
       run: npm install
+      
+    - name: Ensure Electron binary is downloaded
+      run: node node_modules/electron/install.js
 
     - name: Build App
       run: npm run build
@@ -39,7 +42,7 @@ jobs:
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        files: ManyGameLibBuild.zip
+        files: ManyGameLib-Build.zip
         tag_name: v1.0.1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
