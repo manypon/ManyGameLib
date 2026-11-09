@@ -1,0 +1,30 @@
+{
+  "name": "manygamelib",
+  "version": "1.0.0",
+  "description": "Local Game Lib",
+  "author": "manypon",
+  "license": "MIT",
+  "repository": "github/manypon/manygamelib
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.manygamelib.app",
+    "productName": "ManyGameLib",
+    "electronDist": "node_modules/electron/dist",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "ui/**/*", "build/**/*"],
+    "win": {
+      "target": "dir",
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    }
+  }
+}

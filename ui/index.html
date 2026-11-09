@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>ManyGameLib</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+          <defs>
+            <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#7a5cff"/>
+              <stop offset="1" stop-color="#4326d9"/>
+            </linearGradient>
+          </defs>
+          <rect width="40" height="40" rx="11" fill="url(#lg)"/>
+          <path d="M15 11.5v17l14-8.5z" fill="#fff"/>
+        </svg>
+        <div class="brand-text">
+          <b>ManyGameLib</b>
+          <small>v1.0.0</small>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav-item active" data-view="library">
+          <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+          <span>Библиотека</span>
+        </button>
+        <button class="nav-item" data-view="favorites">
+          <svg viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/></svg>
+          <span>Избранное</span>
+        </button>
+        <button class="nav-item" data-view="recent">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+          <span>Недавние</span>
+        </button>
+      </nav>
+
+      <div class="side-foot">
+        <div class="side-foot-icon">
+          <svg viewBox="0 0 24 24"><path d="M6 8h12a3 3 0 0 1 3 3.2l-.7 5.2a2.4 2.4 0 0 1-4.2 1.2L14.5 16h-5l-1.6 1.6a2.4 2.4 0 0 1-4.2-1.2L3 11.2A3 3 0 0 1 6 8z"/><path d="M8 11v3M6.5 12.5h3"/></svg>
+        </div>
+        <div>
+          <div class="side-foot-title">Локальная библиотека</div>
+          <div class="side-foot-count" id="libCount"></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <label class="search">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="search" type="text" placeholder="Поиск игр..." autocomplete="off" spellcheck="false">
+        </label>
+        <div class="drag-spacer"></div>
+        <div class="winctl">
+          <button id="wMin" title="Свернуть"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+          <button id="wMax" title="Развернуть"><svg viewBox="0 0 12 12"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1"/></svg></button>
+          <button id="wClose" title="Закрыть" class="close"><svg viewBox="0 0 12 12"><path d="m2.5 2.5 7 7M9.5 2.5l-7 7"/></svg></button>
+        </div>
+      </header>
+
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <div id="overlay"></div>
+  <div id="menu" class="ctx" hidden></div>
+  <div id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
