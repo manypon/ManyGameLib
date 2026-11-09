@@ -31,6 +31,9 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 
 - On first launch the library is empty and the app asks you to add your first game: **game path**, **icon** (optional) and **name** (taken from the file or folder name by default).
 - Grid and list views, search, sorting, favorites, recent games and a details view.
+- **Editable top block.** When adding (or later via "Edit") you choose what the top of the library shows for the game: a blurred cover, your own banner image or a plain color as the background, a logo image instead of the title, and the cover on the right (cropped or shown whole). A live preview updates as you change options.
+- **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
+- Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu.
 - Supported files: `.exe`, `.jar` (runs through Java, which must be installed), `.lnk` and `.url` shortcuts, plus `.bat`, `.cmd` and `.msi`. Any other file opens with the program Windows has assigned to it.
 - Games start in their own folder. If a game needs administrator rights, Windows shows the UAC prompt.
@@ -52,6 +55,8 @@ If you used the earlier GameLib version (data in `%APPDATA%\gamelib`), the libra
 ## Icons and covers
 
 Best results with a 512×512 square or a 600×900 vertical cover (PNG, JPG, WEBP, ICO, BMP or GIF), up to 8 MB. The image is cropped to fit the tile, centered.
+
+For the top block: a banner around 1920×620, and a logo as a PNG with a transparent background (up to about 520×130 on screen).
 
 ## Project structure
 

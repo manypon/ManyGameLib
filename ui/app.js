@@ -13,8 +13,13 @@ const appWindow = {
   close: () => window.api.win('close'),
 };
 
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'ico', 'bmp', 'gif'];
+const DEFAULT_HERO = { bg: 'blur', art: true, fit: 'cover' };
+
 const state = {
   games: [],
+  assets: {},           // id -> { icon, banner, logo }: тяжёлые картинки, грузим по требованию
+  heroId: null,         // игра, которая сейчас показана в верхнем блоке
   view: 'library',      // library | favorites | recent
   query: '',
   sort: 'name',         // name | added | played
@@ -53,6 +58,7 @@ const ICON = {
   star: svg('<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/>'),
   clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
   trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/>'),
+  edit: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>'),
   arrow: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
   close: svg('<path d="m5 5 14 14M19 5 5 19"/>'),
   grid: svg('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
@@ -95,7 +101,7 @@ function formatDate(ts) {
 
 function hueOf(str) {
   let x = 0;
-  for (const ch of str) x = (x * 31 + ch.codePointAt(0)) >>> 0;
+  for (const ch of String(str)) x = (x * 31 + ch.codePointAt(0)) >>> 0;
   return x % 360;
 }
 
@@ -107,7 +113,8 @@ function errText(e) {
 function coverNode(game) {
   if (game.icon) return h('img', { src: game.icon, alt: '', draggable: 'false' });
   const hue = hueOf(game.name);
-  const letter = (game.name.trim()[0] || '?').toUpperCase();
+  // [...строка] делит по символам, а не по половинкам суррогатных пар (эмодзи).
+  const letter = ([...String(game.name).trim()][0] || '?').toUpperCase();
   return h('div', {
     class: 'cover-fill',
     style: `background:linear-gradient(135deg,hsl(${hue} 62% 46%),hsl(${(hue + 40) % 360} 58% 26%))`,
@@ -137,6 +144,34 @@ async function refresh() {
     toast(errText(e), 'error');
   }
   render();
+}
+
+/* При возвращении в окно обновляем метки «Файл не найден»:
+   например, подключили диск с играми или вернули перенесённый файл. */
+async function syncMissing() {
+  if (!state.games.length) return;
+  try {
+    const missing = new Set(await invoke('get_missing'));
+    let changed = false;
+    for (const g of state.games) {
+      const m = missing.has(g.id);
+      if (g.missing !== m) { g.missing = m; changed = true; }
+    }
+    if (changed) render();
+  } catch { /* не критично */ }
+}
+
+const pendingAssets = new Set();
+async function loadAssets(id) {
+  if (pendingAssets.has(id)) return;
+  pendingAssets.add(id);
+  try {
+    state.assets[id] = await invoke('get_assets', { id });
+  } catch {
+    state.assets[id] = { icon: null, banner: null, logo: null };
+  }
+  pendingAssets.delete(id);
+  if (state.heroId === id) render();
 }
 
 async function launch(id) {
@@ -175,6 +210,7 @@ async function removeGame(id) {
   try {
     await invoke('remove_game', { id });
     state.games = state.games.filter((g) => g.id !== id);
+    delete state.assets[id];
     if (state.selectedId === id) state.selectedId = null;
     render();
     toast('Игра убрана из библиотеки');
@@ -216,6 +252,7 @@ function render() {
 
   content.replaceChildren();
   content.classList.remove('pad-top');
+  state.heroId = null;
 
   if (n === 0) {
     content.append(renderWelcome());
@@ -240,7 +277,6 @@ function render() {
 /* Первый запуск: библиотека пуста — просим добавить первую игру. */
 function renderWelcome() {
   const form = gameForm({
-    submitLabel: 'Добавить игру',
     onDone: (game) => {
       upsert(game);
       state.selectedId = game.id;
@@ -254,8 +290,23 @@ function renderWelcome() {
       h('div', { class: 'welcome-hero' },
         h('div', { class: 'welcome-logo', html: ICON.play }),
         h('h1', {}, 'Добавьте первую игру'),
-        h('p', {}, 'Укажите файл запуска, иконку и название — и игра появится в библиотеке. Дальше запускать её можно одним нажатием.')),
+        h('p', {}, 'Укажите файл запуска, название и при желании картинки. Дальше запускать игру можно одним нажатием.')),
       h('div', { class: 'welcome-form' }, form)));
+}
+
+/* Горизонтальная полоса: колесо мыши листает её вбок, а на краях отдаёт прокрутку странице. */
+function railNode(children) {
+  const rail = h('div', { class: 'rail' }, children);
+  rail.addEventListener('wheel', (e) => {
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    const max = rail.scrollWidth - rail.clientWidth;
+    if (max <= 0) return;
+    const next = Math.max(0, Math.min(max, rail.scrollLeft + e.deltaY));
+    if (next === rail.scrollLeft) return;
+    e.preventDefault();
+    rail.scrollLeft = next;
+  }, { passive: false });
+  return rail;
 }
 
 function renderLibrary() {
@@ -273,7 +324,7 @@ function renderLibrary() {
       h('div', { class: 'section-head' },
         h('h2', {}, 'Недавние игры'),
         h('button', { class: 'link-btn', onClick: () => setView('recent') }, 'Показать все', icon('arrow'))),
-      h('div', { class: 'rail' }, recent.slice(0, 8).map((g) => card(g, { chip: true, hero: true })))));
+      railNode(recent.slice(0, 8).map((g) => card(g, { chip: true, hero: true })))));
   }
 
   const all = sorted(state.games);
@@ -293,32 +344,58 @@ function renderLibrary() {
   return parts;
 }
 
-function renderHero(game, candidates) {
-  const bg = game.icon
-    ? h('img', { src: game.icon, alt: '' })
-    : h('div', {
-        class: 'fallback',
-        style: `background:linear-gradient(135deg,hsl(${hueOf(game.name)} 55% 28%),hsl(${(hueOf(game.name) + 50) % 360} 55% 12%))`,
-      });
+/* Верхний блок. g: название, путь, иконка, баннер, логотип и настройки hero.
+   Один и тот же код рисует и настоящий блок, и предпросмотр в форме. */
+function heroNode(g, { preview = false, dots = null } = {}) {
+  const hero = { ...DEFAULT_HERO, ...(g.hero || {}) };
+  const hue = hueOf(g.name || '');
+  const gradient = `background:linear-gradient(135deg,hsl(${hue} 55% 28%),hsl(${(hue + 50) % 360} 55% 12%))`;
 
-  return h('section', { class: 'hero' },
+  let bg;
+  if (hero.bg === 'banner' && g.banner) bg = h('img', { class: 'sharp', src: g.banner, alt: '' });
+  else if (hero.bg === 'blur' && g.icon) bg = h('img', { src: g.icon, alt: '' });
+  else bg = h('div', { class: 'fallback', style: gradient });
+
+  let art = null;
+  if (hero.art) {
+    art = h('div', { class: `hero-art fit-${hero.fit}` },
+      hero.fit === 'contain' && g.icon ? h('img', { src: g.icon, alt: '' }) : coverNode(g));
+  }
+
+  const title = g.logo
+    ? h('img', { class: 'hero-logo', src: g.logo, alt: g.name, title: g.name })
+    : h('h1', { class: 'hero-title' }, g.name);
+
+  const go = (fn) => (preview ? null : fn);
+
+  return h('section', { class: 'hero' + (preview ? ' is-preview' : '') },
     h('div', { class: 'hero-bg' }, bg),
-    h('div', { class: 'hero-art' }, coverNode(game)),
-    h('div', { class: 'hero-body', key: game.id },
-      h('div', { class: 'hero-eyebrow' }, icon('clock'), game.last_played ? 'Последний запуск' : 'В библиотеке'),
-      h('h1', { class: 'hero-title' }, game.name),
-      h('p', { class: 'hero-sub' }, game.last_played ? formatLast(game.last_played) : 'Ещё не запускалась'),
-      h('p', { class: 'hero-path', title: game.exe_path }, game.exe_path),
+    art,
+    h('div', { class: 'hero-body' },
+      h('div', { class: 'hero-eyebrow' }, icon('clock'), g.last_played ? 'Последний запуск' : 'В библиотеке'),
+      title,
+      h('p', { class: 'hero-sub' }, g.last_played ? formatLast(g.last_played) : 'Ещё не запускалась'),
+      h('p', { class: 'hero-path', title: g.exe_path }, g.exe_path),
       h('div', { class: 'hero-actions' },
-        h('button', { class: 'btn primary', onClick: () => launch(game.id) }, icon('play'), 'Запустить'),
-        h('button', { class: 'btn ghost', onClick: () => openDetails(game.id) }, icon('info'), 'Подробнее'),
-        h('button', { class: 'btn ghost icon', title: 'Ещё', onClick: (e) => openMenu(e, game, true) }, icon('more')))),
-    candidates.length > 1 && h('div', { class: 'hero-dots' },
-      candidates.map((c) => h('button', {
-        class: c.id === game.id ? 'on' : '',
+        h('button', { class: 'btn primary', type: 'button', onClick: go(() => launch(g.id)) }, icon('play'), 'Запустить'),
+        h('button', { class: 'btn ghost', type: 'button', onClick: go(() => openDetails(g.id)) }, icon('info'), 'Подробнее'),
+        h('button', { class: 'btn ghost icon', type: 'button', title: 'Ещё', 'data-menu-trigger': true, onClick: go((e) => openMenu(e, g)) }, icon('more')))),
+    dots && dots.length > 1 && h('div', { class: 'hero-dots' },
+      dots.map((c) => h('button', {
+        class: c.id === g.id ? 'on' : '',
         title: c.name,
         onClick: () => selectGame(c.id, false),
       }))));
+}
+
+function renderHero(game, candidates) {
+  state.heroId = game.id;
+  const assets = state.assets[game.id];
+  if (!assets && (game.has_banner || game.has_logo)) loadAssets(game.id);
+
+  // Если выбранной игры нет среди первых четырёх, показываем для неё отдельную точку.
+  const dots = candidates.some((c) => c.id === game.id) ? candidates : [...candidates, game];
+  return heroNode({ ...game, banner: assets && assets.banner, logo: assets && assets.logo }, { dots });
 }
 
 function sortSelect() {
@@ -356,13 +433,29 @@ function renderSearch() {
 
 /* ---------- Карточки ---------- */
 
+function activate(game, hero) {
+  if (hero) selectGame(game.id, true); else openDetails(game.id);
+}
+
+/* С клавиатуры: Enter запускает игру, пробел делает то же, что клик. */
+function cardKeys(game, hero) {
+  return (e) => {
+    if (e.target !== e.currentTarget) return; // вложенные кнопки обрабатывают себя сами
+    if (e.key === 'Enter') { e.preventDefault(); launch(game.id); }
+    else if (e.key === ' ') { e.preventDefault(); activate(game, hero); }
+  };
+}
+
 function card(game, { chip = false, hero = false } = {}) {
-  const el = h('div', {
+  return h('div', {
     class: 'card' + (hero && game.id === state.selectedId ? ' selected' : ''),
     title: game.name,
-    onClick: () => (hero ? selectGame(game.id, true) : openDetails(game.id)),
+    tabindex: '0',
+    role: 'button',
+    onClick: () => activate(game, hero),
     onDblclick: () => launch(game.id),
-    onContextmenu: (e) => openMenu(e, game, false),
+    onKeydown: cardKeys(game, hero),
+    onContextmenu: (e) => openMenu(e, game),
   },
     h('div', { class: 'cover' + (game.missing ? ' missing' : '') },
       coverNode(game),
@@ -370,33 +463,38 @@ function card(game, { chip = false, hero = false } = {}) {
       game.favorite && h('span', { class: 'fav-badge', html: ICON.star }),
       chip && h('span', { class: 'chip' }, icon('clock'), formatLast(game.last_played)),
       h('button', {
-        class: 'play-fab', title: 'Запустить',
+        class: 'play-fab', title: 'Запустить', type: 'button',
         onClick: (e) => { e.stopPropagation(); launch(game.id); },
         onDblclick: (e) => e.stopPropagation(),
       }, icon('play'))),
     h('div', { class: 'card-name' }, game.name));
-  return el;
 }
 
 function addTile() {
-  return h('div', { class: 'card add', onClick: openAddModal },
+  return h('div', {
+    class: 'card add', tabindex: '0', role: 'button', onClick: openAddModal,
+    onKeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAddModal(); } },
+  },
     h('div', { class: 'cover' }, icon('plus'), h('span', {}, 'Добавить игру')));
 }
 
 function row(game, hero) {
   return h('div', {
     class: 'row' + (hero && game.id === state.selectedId ? ' selected' : ''),
-    onClick: () => (hero ? selectGame(game.id, true) : openDetails(game.id)),
+    tabindex: '0',
+    role: 'button',
+    onClick: () => activate(game, hero),
     onDblclick: () => launch(game.id),
-    onContextmenu: (e) => openMenu(e, game, false),
+    onKeydown: cardKeys(game, hero),
+    onContextmenu: (e) => openMenu(e, game),
   },
     h('div', { class: 'thumb' }, coverNode(game)),
     h('div', { style: 'min-width:0' },
       h('div', { class: 'r-name' }, game.name),
       h('div', { class: 'r-path', title: game.exe_path }, game.missing ? 'Файл не найден — ' + game.exe_path : game.exe_path)),
     h('div', { class: 'r-time' }, formatLast(game.last_played)),
-    h('button', { class: 'r-btn', title: 'Ещё', onClick: (e) => { e.stopPropagation(); openMenu(e, game, false); } }, icon('more')),
-    h('button', { class: 'r-btn play', title: 'Запустить', onClick: (e) => { e.stopPropagation(); launch(game.id); } }, icon('play')));
+    h('button', { class: 'r-btn', type: 'button', title: 'Ещё', 'data-menu-trigger': true, onClick: (e) => { e.stopPropagation(); openMenu(e, game); } }, icon('more')),
+    h('button', { class: 'r-btn play', type: 'button', title: 'Запустить', onClick: (e) => { e.stopPropagation(); launch(game.id); } }, icon('play')));
 }
 
 /* ---------- Навигация ---------- */
@@ -422,30 +520,38 @@ function selectGame(id, scrollUp) {
 
 /* ---------- Контекстное меню ---------- */
 
+let menuTrigger = null; // кнопка «⋯», которой открыто меню (повторный клик по ней закрывает меню)
+
 function closeMenu() {
   const m = $('#menu');
   m.hidden = true;
   m.replaceChildren();
+  menuTrigger = null;
 }
 
 function openMenu(e, game) {
   e.preventDefault();
   e.stopPropagation();
   const m = $('#menu');
+
+  const trigger = e.type === 'click' ? e.currentTarget : null;
+  if (trigger && menuTrigger === trigger && !m.hidden) { closeMenu(); return; }
+
   const item = (cls, ic, label, fn) =>
-    h('button', { class: cls, onClick: () => { closeMenu(); fn(); } }, icon(ic), label);
+    h('button', { class: cls, type: 'button', onClick: () => { closeMenu(); fn(); } }, icon(ic), label);
 
   m.replaceChildren(
     item('', 'play', 'Запустить', () => launch(game.id)),
     item('', 'star', game.favorite ? 'Убрать из избранного' : 'В избранное', () => toggleFavorite(game.id)),
     item('', 'info', 'Подробнее', () => openDetails(game.id)),
+    item('', 'edit', 'Изменить', () => openEditModal(game.id)),
     h('hr'),
     item('danger', 'trash', 'Убрать из библиотеки', () => removeGame(game.id)));
   m.hidden = false;
+  menuTrigger = trigger;
 
-  // Позиция: у курсора, но не за краем окна.
-  const r = e.currentTarget instanceof Element && e.type === 'click'
-    ? e.currentTarget.getBoundingClientRect() : null;
+  // Позиция: у курсора (или под кнопкой), но не за краем окна.
+  const r = trigger ? trigger.getBoundingClientRect() : null;
   let x = r ? r.left : e.clientX;
   let y = r ? r.bottom + 6 : e.clientY;
   const { width, height } = m.getBoundingClientRect();
@@ -456,7 +562,7 @@ function openMenu(e, game) {
 }
 
 document.addEventListener('mousedown', (e) => {
-  if (!$('#menu').hidden && !e.target.closest('#menu')) closeMenu();
+  if (!$('#menu').hidden && !e.target.closest('#menu') && !e.target.closest('[data-menu-trigger]')) closeMenu();
 });
 document.addEventListener('contextmenu', (e) => {
   if (!e.target.closest('.card, .row, input')) e.preventDefault();
@@ -465,47 +571,89 @@ document.addEventListener('contextmenu', (e) => {
 /* ---------- Модальные окна ---------- */
 
 let closeCurrent = null;
+let currentGuard = null; // true, если в открытом окне есть несохранённые изменения
 
 function closeModal() {
   if (closeCurrent) { closeCurrent(); closeCurrent = null; }
+  currentGuard = null;
 }
 
+/* Закрытие по Esc или клику мимо. Если в форме есть введённые данные, не закрываем. */
+function tryDismiss() {
+  if (currentGuard && currentGuard()) {
+    toast('В окне есть несохранённые данные. Если они не нужны, закройте окно крестиком.');
+    return;
+  }
+  closeModal();
+}
+
+/* build(modal) может вернуть функцию-«охранник» (есть ли несохранённые данные). */
 function openModal(build) {
   closeModal();
   const backdrop = h('div', { class: 'backdrop' });
   const modal = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' });
-  backdrop.addEventListener('mousedown', (e) => { if (e.target === backdrop) closeModal(); });
-  build(modal);
+  backdrop.addEventListener('mousedown', (e) => { if (e.target === backdrop) tryDismiss(); });
+  const guard = build(modal);
   backdrop.append(modal);
   $('#overlay').append(backdrop);
   requestAnimationFrame(() => backdrop.classList.add('show'));
   closeCurrent = () => backdrop.remove();
+  currentGuard = typeof guard === 'function' ? guard : null;
 }
 
 const modalHead = (title) =>
   h('div', { class: 'modal-head' },
     h('h3', {}, title),
-    h('button', { class: 'x-btn', title: 'Закрыть', onClick: closeModal }, icon('close')));
+    h('button', { class: 'x-btn', type: 'button', title: 'Закрыть', onClick: closeModal }, icon('close')));
 
 function openAddModal() {
   openModal((modal) => {
-    modal.append(
-      modalHead('Добавить игру'),
-      gameForm({
-        submitLabel: 'Добавить игру',
-        autofocus: true,
-        onDone: (game) => {
-          closeModal();
-          upsert(game);
-          state.selectedId = game.id;
-          state.view = 'library';
-          state.query = '';
-          $('#search').value = '';
-          render();
-          $('#content').scrollTop = 0;
-          toast(`«${game.name}» добавлена в библиотеку`);
-        },
-      }));
+    modal.classList.add('wide');
+    const form = gameForm({
+      autofocus: true,
+      onDone: (game) => {
+        closeModal();
+        upsert(game);
+        state.selectedId = game.id;
+        state.view = 'library';
+        state.query = '';
+        $('#search').value = '';
+        render();
+        $('#content').scrollTop = 0;
+        toast(`«${game.name}» добавлена в библиотеку`);
+      },
+    });
+    modal.append(modalHead('Добавить игру'), form);
+    return form.isDirty;
+  });
+}
+
+async function openEditModal(id) {
+  const game = state.games.find((g) => g.id === id);
+  if (!game) return;
+  let assets;
+  try {
+    assets = await invoke('get_assets', { id });
+  } catch (e) {
+    toast(errText(e), 'error');
+    return;
+  }
+  openModal((modal) => {
+    modal.classList.add('wide');
+    const form = gameForm({
+      mode: 'edit',
+      game,
+      assets,
+      onDone: (updated) => {
+        closeModal();
+        upsert(updated);
+        delete state.assets[updated.id]; // картинки могли измениться, загрузим заново
+        render();
+        toast('Изменения сохранены');
+      },
+    });
+    modal.append(modalHead('Изменить игру'), form);
+    return form.isDirty;
   });
 }
 
@@ -529,11 +677,15 @@ function openDetails(id) {
         h('dt', {}, 'Избранное'),
         h('dd', {}, game.favorite ? 'Да' : 'Нет')),
       h('div', { class: 'modal-actions split' },
-        h('button', { class: 'btn danger small', onClick: () => { closeModal(); removeGame(game.id); } }, icon('trash'), 'Убрать'),
+        h('button', { class: 'btn danger small', type: 'button', onClick: () => { closeModal(); removeGame(game.id); } }, icon('trash'), 'Убрать'),
         h('div', { style: 'display:flex;gap:10px' },
-          h('button', { class: 'btn ghost small', onClick: () => { closeModal(); toggleFavorite(game.id); } },
-            icon('star'), game.favorite ? 'Из избранного' : 'В избранное'),
-          h('button', { class: 'btn primary small', onClick: () => { closeModal(); launch(game.id); } }, icon('play'), 'Запустить'))));
+          h('button', { class: 'btn ghost small', type: 'button', onClick: () => { closeModal(); openEditModal(game.id); } }, icon('edit'), 'Изменить'),
+          h('button', {
+            class: 'btn ghost small sq' + (game.favorite ? ' fav-on' : ''), type: 'button',
+            title: game.favorite ? 'Убрать из избранного' : 'В избранное',
+            onClick: () => { closeModal(); toggleFavorite(game.id); },
+          }, icon('star')),
+          h('button', { class: 'btn primary small', type: 'button', onClick: () => { closeModal(); launch(game.id); } }, icon('play'), 'Запустить'))));
   });
 }
 
@@ -547,8 +699,8 @@ function confirmModal({ title, text, okLabel }) {
         h('div', { class: 'modal-head' }, h('h3', {}, title)),
         h('p', {}, text),
         h('div', { class: 'modal-actions' },
-          h('button', { class: 'btn ghost small', onClick: () => { finish(false); closeModal(); } }, 'Отмена'),
-          h('button', { class: 'btn danger small', onClick: () => { finish(true); closeModal(); } }, okLabel)));
+          h('button', { class: 'btn ghost small', type: 'button', onClick: () => { finish(false); closeModal(); } }, 'Отмена'),
+          h('button', { class: 'btn danger small', type: 'button', onClick: () => { finish(true); closeModal(); } }, okLabel)));
     });
     // Закрытие по Esc/клику мимо тоже означает «отмена».
     const prev = closeCurrent;
@@ -556,135 +708,301 @@ function confirmModal({ title, text, okLabel }) {
   });
 }
 
-/* ---------- Форма добавления игры ---------- */
+/* ---------- Мелкие элементы формы ---------- */
 
-function gameForm({ submitLabel, onDone, autofocus = false }) {
-  const st = { name: '', exe: '', icon: '', nameTouched: false, busy: false };
+/* Переключатель из нескольких вариантов. */
+function segmented(options, get, set) {
+  const btns = options.map(([value, label]) =>
+    h('button', { type: 'button', onClick: () => { set(value); sync(); } }, label));
+  const node = h('div', { class: 'opts' }, btns);
+  function sync() { btns.forEach((b, i) => b.classList.toggle('on', options[i][0] === get())); }
+  sync();
+  return { node, sync };
+}
+
+/* Флажок. */
+function checkbox(label, get, set) {
+  const input = h('input', { type: 'checkbox', onChange: (e) => set(e.target.checked) });
+  const node = h('label', { class: 'check' }, input, h('span', {}, label));
+  const sync = () => { input.checked = !!get(); };
+  sync();
+  return { node, sync };
+}
+
+const field = (label, ...kids) =>
+  h('div', { class: 'field' }, h('span', { class: 'field-label' }, label), ...kids);
+
+/* ---------- Форма добавления и изменения игры ---------- */
+
+const PICK_TITLES = {
+  icon: 'Выберите иконку или обложку игры',
+  banner: 'Выберите баннер для верхнего блока',
+  logo: 'Выберите логотип игры',
+};
+
+function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus = false }) {
+  const editing = mode === 'edit';
+
+  const st = {
+    name: game ? game.name : '',
+    exe: game ? game.exe_path : '',
+    nameTouched: editing,
+    hero: { ...DEFAULT_HERO, ...(game ? game.hero : {}) },
+    // url — что показываем сейчас; mode и path — что сделать при сохранении:
+    // keep (оставить как есть), set (взять файл path), clear (убрать).
+    img: {
+      icon: { url: assets ? assets.icon : null, mode: 'keep', path: '' },
+      banner: { url: assets ? assets.banner : null, mode: 'keep', path: '' },
+      logo: { url: assets ? assets.logo : null, mode: 'keep', path: '' },
+    },
+    busy: false,
+  };
+  // Были ли картинки у игры до правки (нужно, чтобы понять, что именно удалять).
+  const had = { icon: !!st.img.icon.url, banner: !!st.img.banner.url, logo: !!st.img.logo.url };
 
   const error = h('div', { class: 'form-error', hidden: true });
   const showError = (msg) => { error.textContent = msg; error.hidden = !msg; };
 
-  const nameInput = h('input', {
-    class: 'input', type: 'text', maxlength: '80', placeholder: 'Например, Elden Ring', spellcheck: 'false',
-    onInput: (e) => { st.name = e.target.value; st.nameTouched = true; },
-  });
+  /* --- Путь и название --- */
 
   const exeInput = h('input', {
     class: 'input', type: 'text', readonly: true, placeholder: 'C:\\Games\\Game\\game.exe',
     onClick: pickExe,
   });
+  exeInput.value = st.exe;
 
-  const iconInput = h('input', {
-    class: 'input', type: 'text', readonly: true, placeholder: 'PNG, JPG, ICO… (необязательно)',
-    onClick: pickIcon,
+  const nameInput = h('input', {
+    class: 'input', type: 'text', maxlength: '80', placeholder: 'Например, Elden Ring', spellcheck: 'false',
+    onInput: (e) => { st.name = e.target.value; st.nameTouched = true; updatePreview(); },
   });
-
-  const preview = h('button', { class: 'icon-pick', type: 'button', title: 'Выбрать иконку', onClick: pickIcon },
-    h('span', { html: ICON.image, style: 'display:contents' }));
+  nameInput.value = st.name;
 
   async function pickExe() {
     try {
-      const path = await dialog.open({
-        multiple: false,
-        directory: false,
+      const picked = await dialog.open({
         title: 'Выберите файл запуска игры',
         filters: [
           { name: 'Игры и программы', extensions: ['exe', 'jar', 'bat', 'cmd', 'lnk', 'url', 'com', 'msi'] },
           { name: 'Все файлы', extensions: ['*'] },
         ],
       });
-      if (!path) return;
-      st.exe = path;
-      exeInput.value = path;
+      if (!picked) return;
+      st.exe = picked;
+      exeInput.value = picked;
       showError('');
       if (!st.nameTouched || !st.name.trim()) {
-        const parts = path.split(/[\\/]/).filter(Boolean);
-        const clean = (s) => s.replace(/\.[^.]+$/, '').replace(/_+/g, ' ').trim();
-        let guess = clean(parts.pop() || '');
-        // У exe часто общее имя (launcher, game…) — тогда берём название папки игры.
-        if (/^(launcher|game|start|play|run|main|app|bin|client|win64|shipping)$/i.test(guess) && parts.length) {
-          guess = clean(parts.pop());
+        const parts = picked.split(/[\\/]/).filter(Boolean);
+        const file = (parts.pop() || '').replace(/\.[^.]+$/, ''); // «расширение» срезаем только у файла
+        let guess = file;
+        // У exe часто общее имя (launcher, game…): тогда берём название папки игры как есть.
+        if (/^(launcher|game|start|play|run|main|app|bin|client|win64|shipping)$/i.test(file) && parts.length) {
+          guess = parts.pop();
         }
-        st.name = guess;
+        st.name = guess.replace(/_+/g, ' ').trim();
         nameInput.value = st.name;
       }
+      updatePreview();
     } catch (e) {
       showError(errText(e));
     }
   }
 
-  async function pickIcon() {
+  /* --- Картинки --- */
+
+  function imageRow(kind, placeholder) {
+    const input = h('input', {
+      class: 'input', type: 'text', readonly: true, placeholder, onClick: () => pickImage(kind),
+    });
+    const clear = h('button', {
+      class: 'btn ghost small sq', type: 'button', title: 'Убрать', onClick: () => setImage(kind, null),
+    }, icon('close'));
+    const row = h('div', { class: 'pick-row' },
+      input,
+      h('button', { class: 'btn ghost small', type: 'button', onClick: () => pickImage(kind) }, 'Обзор…'),
+      clear);
+    const sync = () => {
+      const im = st.img[kind];
+      input.value = im.path || (im.url ? 'Текущая картинка' : '');
+      clear.hidden = !im.url;
+    };
+    return { row, sync };
+  }
+
+  const iconRow = imageRow('icon', 'PNG, JPG, ICO… (необязательно)');
+  const bannerRow = imageRow('banner', 'Широкая картинка, например 1920×620');
+  const logoRow = imageRow('logo', 'PNG с прозрачным фоном (необязательно)');
+
+  const iconPick = h('button', {
+    class: 'icon-pick', type: 'button', title: 'Выбрать иконку', onClick: () => pickImage('icon'),
+  });
+
+  function syncImages() {
+    iconRow.sync();
+    bannerRow.sync();
+    logoRow.sync();
+    const u = st.img.icon.url;
+    iconPick.classList.toggle('filled', !!u);
+    iconPick.replaceChildren(u ? h('img', { src: u, alt: '' }) : icon('image'));
+  }
+
+  function setImage(kind, path, url) {
+    const im = st.img[kind];
+    if (path) {
+      im.path = path; im.url = url; im.mode = 'set';
+    } else {
+      im.path = ''; im.url = null; im.mode = had[kind] ? 'clear' : 'keep';
+    }
+    if (kind === 'banner') {
+      // Выбрал баннер — логично показать его фоном; убрал — вернуть размытую обложку.
+      if (path) st.hero.bg = 'banner';
+      else if (st.hero.bg === 'banner') st.hero.bg = 'blur';
+      syncHero();
+    }
+    syncImages();
+    updatePreview();
+  }
+
+  async function pickImage(kind) {
     try {
-      const path = await dialog.open({
-        multiple: false,
-        directory: false,
-        title: 'Выберите иконку игры',
-        filters: [{ name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'webp', 'ico', 'bmp', 'gif'] }],
+      const picked = await dialog.open({
+        title: PICK_TITLES[kind],
+        filters: [{ name: 'Изображения', extensions: IMAGE_EXTS }],
       });
-      if (!path) return;
-      const url = await invoke('preview_icon', { path });
-      st.icon = path;
-      iconInput.value = path;
-      preview.classList.add('filled');
-      preview.replaceChildren(h('img', { src: url, alt: '' }));
+      if (!picked) return;
+      const url = await invoke('preview_image', { path: picked });
+      setImage(kind, picked, url);
       showError('');
     } catch (e) {
       showError(errText(e));
     }
   }
 
-  const submitBtn = h('button', { class: 'btn primary wide', type: 'submit' }, submitLabel);
+  /* --- Верхний блок --- */
+
+  const previewBox = h('div', { class: 'hero-preview' });
+
+  function updatePreview() {
+    const spec = {
+      name: st.name.trim() || 'Название игры',
+      exe_path: st.exe || 'C:\\Games\\Game\\game.exe',
+      last_played: null,
+      icon: st.img.icon.url,
+      banner: st.img.banner.url,
+      logo: st.img.logo.url,
+      hero: st.hero,
+    };
+    previewBox.replaceChildren(h('div', { class: 'hero-preview-inner' }, heroNode(spec, { preview: true })));
+  }
+
+  const bgSeg = segmented(
+    [['blur', 'Размытая обложка'], ['banner', 'Свой баннер'], ['color', 'Цвет']],
+    () => st.hero.bg,
+    (v) => { st.hero.bg = v; syncHero(); updatePreview(); });
+  const artCheck = checkbox('Показывать обложку справа', () => st.hero.art,
+    (v) => { st.hero.art = v; syncHero(); updatePreview(); });
+  const fitSeg = segmented(
+    [['cover', 'Обрезать по рамке'], ['contain', 'Показать целиком']],
+    () => st.hero.fit,
+    (v) => { st.hero.fit = v; updatePreview(); });
+
+  const bannerField = field('Картинка баннера', bannerRow.row);
+
+  function syncHero() {
+    bgSeg.sync();
+    artCheck.sync();
+    fitSeg.sync();
+    bannerField.hidden = st.hero.bg !== 'banner';
+    fitSeg.node.hidden = !st.hero.art;
+  }
+
+  /* --- Сохранение --- */
+
+  const submitBtn = h('button', { class: 'btn primary wide', type: 'submit' }, editing ? 'Сохранить' : 'Добавить игру');
 
   const form = h('form', { class: 'form', novalidate: true, onSubmit: async (e) => {
     e.preventDefault();
     if (st.busy) return;
     if (!st.exe) return showError('Выберите файл, которым запускается игра.');
     if (!st.name.trim()) { nameInput.focus(); return showError('Введите название игры.'); }
+    if (st.hero.bg === 'banner' && !st.img.banner.url) {
+      return showError('Выберите картинку для баннера или другой фон верхнего блока.');
+    }
+
+    const payload = {
+      name: st.name.trim(),
+      exePath: st.exe,
+      hero: { ...st.hero },
+      images: Object.fromEntries(Object.entries(st.img).map(([k, v]) => [k, { mode: v.mode, path: v.path }])),
+    };
 
     st.busy = true;
     submitBtn.disabled = true;
     showError('');
     try {
-      const game = await invoke('add_game', {
-        name: st.name.trim(),
-        exePath: st.exe,
-        iconPath: st.icon || null,
-      });
-      onDone(game);
+      const saved = editing
+        ? await invoke('update_game', { id: game.id, ...payload })
+        : await invoke('add_game', payload);
+      onDone(saved);
     } catch (err) {
       showError(errText(err));
       st.busy = false;
       submitBtn.disabled = false;
     }
   } },
-    h('div', { class: 'field' },
-      h('span', { class: 'field-label' }, 'Путь к игре'),
+    field('Путь к игре',
       h('div', { class: 'pick-row' },
         exeInput,
         h('button', { class: 'btn ghost small', type: 'button', onClick: pickExe }, 'Обзор…'))),
-    h('div', { class: 'field' },
-      h('span', { class: 'field-label' }, 'Иконка'),
-      h('div', { class: 'icon-row' },
-        preview,
-        h('div', { class: 'icon-side' },
-          h('div', { class: 'pick-row' },
-            iconInput,
-            h('button', { class: 'btn ghost small', type: 'button', onClick: pickIcon }, 'Обзор…')),
-          h('span', { class: 'hint' }, 'Без иконки будет цветная плитка с первой буквой названия.')))),
     h('label', { class: 'field' },
       h('span', { class: 'field-label' }, 'Название'),
       nameInput),
+    field('Иконка или обложка',
+      h('div', { class: 'icon-row' },
+        iconPick,
+        h('div', { class: 'icon-side' },
+          iconRow.row,
+          h('span', { class: 'hint' }, 'Лучше всего квадрат 512×512 или вертикальная обложка 600×900. Без неё будет цветная плитка с первой буквой.')))),
+    h('div', { class: 'hero-cfg' },
+      h('div', { class: 'section-title' }, 'Верхний блок'),
+      h('p', { class: 'hint' }, 'Так игра выглядит вверху библиотеки, когда она выбрана. Предпросмотр ниже обновляется сразу.'),
+      previewBox,
+      field('Фон', bgSeg.node),
+      bannerField,
+      field('Логотип вместо названия', logoRow.row),
+      field('Обложка справа', h('div', { class: 'inline' }, artCheck.node, fitSeg.node))),
     error,
     submitBtn);
 
+  // Есть ли несохранённые данные (для защиты от случайного закрытия окна).
+  const snap = () => JSON.stringify([
+    st.name.trim(), st.exe, st.hero,
+    Object.values(st.img).map((v) => [v.mode, v.path]),
+  ]);
+  const initial = snap();
+  form.isDirty = () => !st.busy && snap() !== initial;
+
+  syncImages();
+  syncHero();
+  updatePreview();
   if (autofocus) setTimeout(() => exeInput.focus(), 60);
   return form;
+}
+
+/* ---------- Окно: кнопки и состояние ---------- */
+
+const MAX_ICON = '<svg viewBox="0 0 12 12"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1"/></svg>';
+const RESTORE_ICON = '<svg viewBox="0 0 12 12"><rect x="2.2" y="3.8" width="6" height="6" rx="1"/><path d="M4 3.8V2.8a.8.8 0 0 1 .8-.8h4.4a.8.8 0 0 1 .8.8v4.4a.8.8 0 0 1-.8.8H8.2"/></svg>';
+
+function setMaximized(maximized) {
+  const btn = $('#wMax');
+  btn.innerHTML = maximized ? RESTORE_ICON : MAX_ICON;
+  btn.title = maximized ? 'Восстановить' : 'Развернуть';
 }
 
 /* ---------- Старт ---------- */
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeMenu(); closeModal(); }
+  if (e.key === 'Escape') { closeMenu(); tryDismiss(); }
 });
 
 $('#nav').addEventListener('click', (e) => {
@@ -700,5 +1018,10 @@ $('#search').addEventListener('input', (e) => {
 $('#wMin').addEventListener('click', () => appWindow.minimize());
 $('#wMax').addEventListener('click', () => appWindow.toggleMaximize());
 $('#wClose').addEventListener('click', () => appWindow.close());
+
+window.api.onWinState(setMaximized);
+invoke('win_state').then(setMaximized).catch(() => {});
+invoke('get_version').then((v) => { $('.brand-text small').textContent = `v${v}`; }).catch(() => {});
+window.addEventListener('focus', syncMissing);
 
 refresh();

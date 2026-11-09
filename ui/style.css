@@ -28,6 +28,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+[hidden] { display: none !important; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 input, select { font: inherit; color: inherit; }
 svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -113,23 +114,41 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .hero-bg { position: absolute; inset: 0; overflow: hidden; }
 .hero-bg img { position: absolute; inset: -60px; width: calc(100% + 120px); height: calc(100% + 120px); object-fit: cover; filter: blur(46px) saturate(1.35) brightness(0.5); }
 .hero-bg .fallback { position: absolute; inset: 0; }
+.hero-bg img.sharp { inset: 0; width: 100%; height: 100%; filter: brightness(0.82) saturate(1.05); }
 .hero-bg::after {
   content: ""; position: absolute; inset: 0;
   background:
     linear-gradient(to top, var(--bg) 2%, rgba(13, 13, 18, 0.55) 38%, rgba(13, 13, 18, 0) 70%),
     linear-gradient(to right, rgba(13, 13, 18, 0.7), rgba(13, 13, 18, 0) 65%);
 }
-.hero-art {
-  position: absolute; right: 96px; top: 96px; width: 224px; height: 224px;
-  border-radius: 30px; overflow: hidden;
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.1);
-  transform: rotate(3deg);
-}
+.hero-art { position: absolute; right: 96px; top: 92px; }
 .hero-art .cover-fill { width: 100%; height: 100%; }
+
+/* Обрезать по рамке: квадрат, картинка заполняет его целиком. */
+.hero-art.fit-cover {
+  width: 224px; height: 224px; border-radius: 30px; overflow: hidden;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.hero-art.fit-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* Показать целиком: рамка повторяет пропорции картинки, ничего не обрезается. */
+.hero-art.fit-contain img {
+  display: block; width: auto; height: auto; max-width: 360px; max-height: 260px;
+  border-radius: 22px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.hero-art.fit-contain .cover-fill {
+  width: 224px; height: 224px; border-radius: 30px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
 .hero-body { position: relative; z-index: 2; max-width: 600px; animation: rise 0.35s ease both; }
 .hero-eyebrow { display: inline-flex; align-items: center; gap: 7px; color: #cfc7ff; font-size: 12.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
 .hero-eyebrow svg { width: 14px; height: 14px; }
 .hero-title { font-size: 50px; line-height: 1.04; font-weight: 800; letter-spacing: -0.025em; text-shadow: 0 4px 30px rgba(0, 0, 0, 0.55); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-logo {
+  display: block; width: auto; height: auto; max-width: 520px; max-height: 130px;
+  object-fit: contain; object-position: left bottom; filter: drop-shadow(0 4px 24px rgba(0, 0, 0, 0.55));
+}
 .hero-sub { margin-top: 12px; color: #c4c4d2; font-size: 15px; }
 .hero-path { margin-top: 4px; color: var(--muted); font: 12px/1.4 "Cascadia Mono", Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
 .hero-actions { display: flex; gap: 10px; margin-top: 24px; }
@@ -270,7 +289,7 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .empty b { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
 
 .welcome { min-height: 100%; display: grid; place-items: center; padding: 96px 40px 40px; }
-.welcome-card { width: 100%; max-width: 560px; animation: rise 0.4s ease both; }
+.welcome-card { width: 100%; max-width: 640px; animation: rise 0.4s ease both; }
 .welcome-hero { text-align: center; margin-bottom: 26px; }
 .welcome-logo { width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 22px; background: linear-gradient(135deg, #7a5cff, #4326d9); display: grid; place-items: center; box-shadow: 0 20px 50px rgba(91, 61, 245, 0.45); }
 .welcome-logo svg { width: 32px; height: 32px; fill: #fff; stroke: none; margin-left: 4px; }
@@ -370,3 +389,46 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 /* ---------- Перетаскивание окна (Electron, окно без рамки) ---------- */
 .topbar, .brand { -webkit-app-region: drag; }
 .search, .winctl, .winctl button { -webkit-app-region: no-drag; }
+
+/* ---------- Форма: верхний блок ---------- */
+.modal.wide { max-width: 640px; }
+
+.hero-cfg { display: flex; flex-direction: column; gap: 14px; padding-top: 18px; border-top: 1px solid var(--border); }
+.section-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+
+/* Предпросмотр: настоящий верхний блок, уменьшенный целиком. */
+.hero-preview {
+  width: 100%; max-width: 585px; overflow: hidden; pointer-events: none;
+  border-radius: 14px; border: 1px solid var(--border-strong); background: var(--bg);
+}
+.hero-preview-inner { width: 1044px; zoom: 0.56; }
+.hero.is-preview { height: 400px; }
+.hero.is-preview .hero-body { animation: none; }
+
+.opts { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: 10px; align-self: flex-start; }
+.opts button { height: 32px; padding: 0 12px; border-radius: 7px; color: var(--muted); font-size: 13px; }
+.opts button:hover:not(.on) { color: var(--text); }
+.opts button.on { background: var(--accent-soft); color: #cfc4ff; }
+
+.check { display: inline-flex; align-items: center; gap: 9px; font-size: 13.5px; cursor: pointer; }
+.check input {
+  appearance: none; -webkit-appearance: none; flex: none; width: 18px; height: 18px; border-radius: 5px; cursor: pointer;
+  background: var(--bg); border: 1.5px solid var(--border-strong); display: grid; place-items: center;
+}
+.check input:checked { background: var(--accent); border-color: var(--accent); }
+.check input:checked::after { content: ""; width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+.inline { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.btn.small.sq { width: 38px; padding: 0; flex: none; }
+.pick-row .btn.small.sq { width: 44px; }
+.btn.fav-on { color: var(--gold); }
+.btn.fav-on svg { fill: currentColor; }
+
+/* ---------- Фокус с клавиатуры ---------- */
+.card:focus, .row:focus { outline: none; }
+.card:focus-visible .cover { border-color: #7a5cff; box-shadow: 0 0 0 3px rgba(122, 92, 255, 0.35), 0 14px 30px rgba(0, 0, 0, 0.5); }
+.card:focus-visible .play-fab { opacity: 1; transform: none; }
+.row:focus-visible { background: var(--accent-soft); border-color: rgba(122, 92, 255, 0.6); }
+.btn:focus-visible, .nav-item:focus-visible, .opts button:focus-visible, .r-btn:focus-visible, .x-btn:focus-visible {
+  outline: 2px solid rgba(122, 92, 255, 0.8); outline-offset: 2px;
+}

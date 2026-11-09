@@ -3,7 +3,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const COMMANDS = new Set([
-  'get_games', 'preview_icon', 'add_game', 'launch_game', 'toggle_favorite', 'remove_game',
+  'get_version', 'get_games', 'get_missing', 'get_assets', 'preview_image',
+  'add_game', 'update_game', 'launch_game', 'toggle_favorite', 'remove_game',
+  'win_state',
 ]);
 
 contextBridge.exposeInMainWorld('api', {
@@ -19,4 +21,5 @@ contextBridge.exposeInMainWorld('api', {
     return res ? res.data : null;
   },
   win: (action) => ipcRenderer.send('win', action),
+  onWinState: (cb) => ipcRenderer.on('win-state', (_event, maximized) => cb(!!maximized)),
 });
