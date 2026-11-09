@@ -2,7 +2,6 @@ name: Build Electron App
 
 on:
   push:
-    branches: [ "main" ]
     tags: [ "v*" ]
   workflow_dispatch:
 
@@ -50,6 +49,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: ManyGameLib-Build.zip
-        tag_name: v1.0.0
+
+        tag_name: ${{ github.ref_name }} 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
