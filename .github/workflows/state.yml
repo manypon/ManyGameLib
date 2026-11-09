@@ -1,0 +1,20 @@
+name: Close Stale Issues
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch: 
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@v9
+        with:
+          stale-issue-message: 'Этот Issue не подавал признаков жизни 30 дней. Если проблема все еще актуальна, напишите об этом. Иначе он будет закрыт через 7 дней.'
+          days-before-stale: 30
+          days-before-close: 7
+          exempt-issue-labels: 'bug, enhancement'
