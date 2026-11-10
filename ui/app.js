@@ -340,14 +340,19 @@ function railNode(children) {
   return rail;
 }
 
-function renderLibrary() {
-  const parts = [];
+/* Какая игра сейчас в верхнем блоке и какие точки-кандидаты показывать. */
+function heroChoice() {
   const recent = recentGames();
   const pool = recent.length ? recent : sorted(state.games);
   const candidates = pool.slice(0, 4);
+  const hero = state.games.find((g) => g.id === state.selectedId) || candidates[0];
+  return { hero, candidates };
+}
 
-  let hero = state.games.find((g) => g.id === state.selectedId);
-  if (!hero) hero = candidates[0];
+function renderLibrary() {
+  const parts = [];
+  const recent = recentGames();
+  const { hero, candidates } = heroChoice();
   parts.push(renderHero(hero, candidates));
 
   if (recent.length) {
@@ -469,6 +474,61 @@ function activate(game, hero) {
   if (hero) selectGame(game.id, true); else openDetails(game.id);
 }
 
+/* Одиночный и двойной клик по плитке.
+   В библиотеке (hero) клик сразу меняет верхний блок и подсветку, не перерисовывая плитки:
+   иначе плитка под курсором заменилась бы и двойной клик пропал. Прокрутка вверх (она
+   сдвигает плитки) ждёт CLICK_DELAY_MS и отменяется двойным кликом, который запускает игру.
+   В остальных разделах одиночный клик открывает окно «Об игре», оно перекроет второй клик,
+   поэтому там действие ждёт CLICK_DELAY_MS. */
+const CLICK_DELAY_MS = 250;
+let pendingClick = null; // { timer, run }
+
+function flushPendingClick() {
+  if (!pendingClick) return;
+  const { timer, run } = pendingClick;
+  clearTimeout(timer); pendingClick = null; run();
+}
+
+function cancelPendingClick() {
+  if (pendingClick) { clearTimeout(pendingClick.timer); pendingClick = null; }
+}
+
+function schedule(run) {
+  flushPendingClick(); // клик по другой плитке: предыдущее действие не теряем
+  const job = { run: () => { pendingClick = null; run(); } };
+  job.timer = setTimeout(job.run, CLICK_DELAY_MS);
+  pendingClick = job;
+}
+
+/* Выбор игры без перерисовки всего экрана: меняем верхний блок и подсветку. */
+function selectInPlace(id) {
+  const game = state.games.find((g) => g.id === id);
+  const heroEl = state.heroId && $('#content').firstElementChild;
+  if (!game || !heroEl) { selectGame(id, false); return; }
+  state.selectedId = id;
+  const { candidates } = heroChoice();
+  heroEl.replaceWith(renderHero(game, candidates));
+  document.querySelectorAll('[data-game-id]').forEach((el) =>
+    el.classList.toggle('selected', el.dataset.gameId === id));
+  refreshLaunchButtons();
+}
+
+function clickHandlers(game, hero) {
+  return {
+    onClick: (e) => {
+      if (e.detail > 1) return; // второй клик двойного: решит dblclick
+      if (hero) {
+        flushPendingClick();
+        selectInPlace(game.id);
+        schedule(() => $('#content').scrollTo({ top: 0, behavior: 'smooth' }));
+      } else {
+        schedule(() => openDetails(game.id));
+      }
+    },
+    onDblclick: () => { cancelPendingClick(); launch(game.id); },
+  };
+}
+
 /* С клавиатуры: Enter запускает игру, пробел делает то же, что клик. */
 function cardKeys(game, hero) {
   return (e) => {
@@ -482,10 +542,10 @@ function card(game, { chip = false, hero = false } = {}) {
   return h('div', {
     class: 'card' + (hero && game.id === state.selectedId ? ' selected' : ''),
     title: game.name,
+    'data-game-id': game.id,
     tabindex: '0',
     role: 'button',
-    onClick: () => activate(game, hero),
-    onDblclick: () => launch(game.id),
+    ...clickHandlers(game, hero),
     onKeydown: cardKeys(game, hero),
     onContextmenu: (e) => openMenu(e, game),
   },
@@ -513,10 +573,10 @@ function addTile() {
 function row(game, hero) {
   return h('div', {
     class: 'row' + (hero && game.id === state.selectedId ? ' selected' : ''),
+    'data-game-id': game.id,
     tabindex: '0',
     role: 'button',
-    onClick: () => activate(game, hero),
-    onDblclick: () => launch(game.id),
+    ...clickHandlers(game, hero),
     onKeydown: cardKeys(game, hero),
     onContextmenu: (e) => openMenu(e, game),
   },
