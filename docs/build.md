@@ -1,0 +1,101 @@
+# Build, run and release
+
+[English](build.md) | [Русский](build_RU.md)
+
+## Requirements
+
+Node.js (LTS). No compilers or native build tools: the app has no native modules. Electron and electron-builder are the only dev dependencies, and there are no runtime dependencies.
+
+## Running from source
+
+```powershell
+npm install
+npm start          # runs: electron .
+```
+
+`start.bat` does the same by double-click: it runs `npm install` if `node_modules` is missing, then starts `node_modules\electron\dist\electron.exe .`.
+
+## Building
+
+```powershell
+npm run build      # runs: electron-builder
+```
+
+or double-click `build.bat`. The script:
+
+1. Closes a running `ManyGameLib.exe` (an open copy locks its own file and the build fails with `EPERM ... unlink`).
+2. Runs `npm install` only if `node_modules` is missing.
+3. Deletes the old `dist\win-unpacked` folder.
+4. Runs `npm run build` and opens the result folder.
+
+Output: `dist\win-unpacked\ManyGameLib.exe`. The whole `win-unpacked` folder can be moved or zipped; Node.js is not needed to run it.
+
+### The `build` section of `package.json`
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `appId` / `productName` | `com.manygamelib.app` / `ManyGameLib` | Identity and the exe name |
+| `files` | `main.js`, `preload.js`, `ui/**/*`, `build/**/*` | Only what the app needs ends up in the package |
+| `electronDist` | `node_modules/electron/dist` | Reuse the Electron already installed by `npm install` instead of downloading it again at build time |
+| `directories.output` | `dist` | Build output folder |
+| `win.target` | `dir` | An unpacked folder, no installer |
+| `win.icon` | `build/icon.ico` | App icon |
+| `win.signAndEditExecutable` | `false` | Skips the step that edits the exe and needs extra tooling; the trade-off is that the exe keeps Electron's default metadata |
+
+### If Electron does not download
+
+`npm install` downloads Electron from GitHub. If that fails (for example with a 504), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `package.json`, `ui` and `build` into `resources\app`.
+
+## Versions and commits
+
+- The version is in `package.json` and follows semantic versioning: a patch number (1.1.x) for fixes, a minor number (1.x.0) for new features. The UI reads it from the main process (`get_version`), so there is only one place to change.
+- Commit messages follow Conventional Commits with a short lowercase title and no body, for example `fix: block repeated game launch` or `perf: debounce library search`.
+- Contribution rules (bug reports, branches, pull requests) are in `CONTRIBUTING.md`.
+
+## Automated build and release (GitHub Actions)
+
+Two workflows live in `.github/workflows/`.
+
+### `build.yml`: build and publish
+
+Runs when a tag starting with `v` is pushed (for example `v1.1.1`), or manually from the Actions tab (`workflow_dispatch`). On `windows-latest` it:
+
+1. Checks out the repository and sets up Node.js 20 with the npm cache.
+2. Runs `npm install` with `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`. The mirror avoids the failed Electron downloads from GitHub (the 504 errors mentioned above).
+3. Runs `node node_modules/electron/install.js` to make sure the Electron binary is really there, because `electronDist` in `package.json` points at it.
+4. Runs `npm run build`.
+5. Uploads `dist/win-unpacked/` as a workflow artifact named `ManyGameLib-Windows`.
+6. Zips the contents of `dist/win-unpacked/` into `ManyGameLib-Build.zip` and attaches it to the release for the tag (`softprops/action-gh-release`, with `contents: write` permission and the built-in `GITHUB_TOKEN`).
+
+Things to know:
+
+- The zip holds the *contents* of `win-unpacked` directly (no top-level folder), so users should unpack it into a folder of their own.
+- A manual run is not tied to a tag: the release name then comes from the branch name (`github.ref_name`). Use tags for real releases.
+
+### `state.yml`: stale issues
+
+Runs every day at 00:00 UTC (and manually). An issue with no activity for 30 days gets a comment asking whether it is still relevant (the text is in Russian); it is closed 7 days later if nobody answers. Issues labeled `bug` or `enhancement` are never touched.
+
+## Making a release
+
+1. Make sure `package.json` has the new version (it is changed once, in the first commit of the release).
+2. Test the build locally with `build.bat` if you can.
+3. Create and push a tag: `git tag v1.1.1` then `git push origin v1.1.1`.
+4. Wait for the `Build Electron App` workflow; it creates the release with `ManyGameLib-Build.zip`.
+5. Edit the release description: what is new and how to install, in English and Russian.
+
+## Project layout
+
+```
+manygamelib/
+├─ main.js         main process
+├─ preload.js      bridge between the UI and main.js
+├─ ui/             index.html, style.css, app.js
+├─ build/          icon.png, icon.ico
+├─ docs/           this documentation
+├─ .github/        GitHub Actions workflows
+├─ CONTRIBUTING.md how to contribute
+├─ start.bat       run from source
+├─ build.bat       build the app
+└─ package.json    scripts, dependencies, electron-builder settings
+```
