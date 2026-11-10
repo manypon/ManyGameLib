@@ -25,8 +25,10 @@ const state = {
   sort: 'name',         // name | added | played
   layout: 'grid',       // grid | list
   selectedId: null,
-  settingsTab: 'library', // вкладка страницы настроек: library | about
+  settingsTab: 'appearance', // вкладка страницы настроек: appearance | library | about
   appInfo: null,        // сведения о приложении для вкладки «О приложении»
+  settings: null,       // настройки приложения (get_settings)
+  wallpaper: null,      // data URL своей картинки фона (грузится, только если она выбрана)
 };
 
 /* ---------- Утилиты ---------- */
@@ -477,6 +479,7 @@ function renderSearch() {
 /* ---------- Страница настроек ---------- */
 
 const SETTINGS_TABS = [
+  { id: 'appearance', label: 'Внешний вид', icon: 'image' },
   { id: 'library', label: 'Библиотека', icon: 'folder' },
   { id: 'about', label: 'О приложении', icon: 'info' },
 ];
@@ -506,6 +509,122 @@ function settingRow(title, hint, control) {
   return h('div', { class: 's-row' },
     h('div', { class: 's-text' }, h('b', {}, title), hint && h('span', {}, hint)),
     h('div', { class: 's-control' }, control));
+}
+
+/* ---------- Фон приложения ---------- */
+
+const DEFAULT_WALLPAPER = 'assets/wallpaper-default.webp';
+
+/* Показывает фон по текущим настройкам. Вызывается и во время движения ползунков,
+   поэтому здесь только смена стилей, без перерисовки страницы. */
+function applyBackground() {
+  const root = $('#appBg');
+  const bg = state.settings && state.settings.background;
+  if (!bg) return;
+  const on = bg.mode !== 'none';
+  document.body.classList.toggle('has-bg', on);
+  root.classList.toggle('ready', on);
+  if (!on) return;
+  const url = bg.mode === 'custom' && state.wallpaper ? state.wallpaper : DEFAULT_WALLPAPER;
+  const img = root.querySelector('.app-bg-img');
+  img.style.backgroundImage = `url("${url}")`;
+  img.style.filter = bg.blur ? `blur(${bg.blur}px)` : 'none';
+  img.style.inset = `-${bg.blur * 2}px`; // запас по краям, чтобы размытие не светило пустотой
+  root.querySelector('.app-bg-dim').style.opacity = String(bg.dim / 100);
+}
+
+async function loadSettings() {
+  try {
+    state.settings = await invoke('get_settings');
+    if (state.settings.background.mode === 'custom') state.wallpaper = await invoke('get_wallpaper');
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+  applyBackground();
+  if (state.view === 'settings') render();
+}
+
+/* Сохраняет часть настроек. Если не вышло, возвращаем то, что реально записано. */
+async function saveSettingsPatch(patch) {
+  try {
+    state.settings = await invoke('save_settings', { patch });
+  } catch (e) {
+    toast(errText(e), 'error');
+    await loadSettings();
+  }
+  applyBackground();
+}
+
+async function pickWallpaper() {
+  try {
+    const picked = await dialog.open({
+      title: 'Выберите картинку для фона',
+      filters: [{ name: 'Картинки', extensions: IMAGE_EXTS }, { name: 'Все файлы', extensions: ['*'] }],
+    });
+    if (!picked) return;
+    state.settings = await invoke('set_wallpaper', { path: picked });
+    state.wallpaper = await invoke('get_wallpaper');
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+  applyBackground();
+  render();
+}
+
+async function clearWallpaper() {
+  try {
+    state.settings = await invoke('clear_wallpaper');
+    state.wallpaper = null;
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+  applyBackground();
+  render();
+}
+
+/* Ползунок: во время движения меняем фон сразу, сохраняем, когда отпустили. */
+function slider({ min, max, step = 1, value, unit, onLive, onSave }) {
+  const label = h('span', { class: 's-value' }, `${value}${unit}`);
+  const input = h('input', {
+    class: 's-range', type: 'range', min: String(min), max: String(max), step: String(step), value: String(value),
+    onInput: (e) => { const n = Number(e.target.value); label.textContent = `${n}${unit}`; onLive(n); },
+    onChange: (e) => onSave(Number(e.target.value)),
+  });
+  return h('div', { class: 's-slider' }, input, label);
+}
+
+function appearancePanel() {
+  const bg = state.settings && state.settings.background;
+  if (!bg) return settingsCard('Фон приложения', 'Загрузка…');
+  const modes = segmented(
+    [['default', 'Стандартный'], ['custom', 'Своя картинка'], ['none', 'Без фона']],
+    () => bg.mode,
+    (mode) => {
+      if (mode === 'custom' && !bg.file) { pickWallpaper(); return; } // сначала нужна картинка
+      bg.mode = mode;
+      applyBackground();
+      render();
+      saveSettingsPatch({ background: { mode } });
+    });
+  const rows = [settingRow('Фон', 'Картинка за интерфейсом', modes.node)];
+  if (bg.mode === 'custom') {
+    rows.push(settingRow('Своя картинка', 'PNG, JPG, WEBP, GIF, BMP или ICO до 8 МБ. Лучше всего 1920×1080',
+      h('div', { class: 's-buttons' },
+        h('button', { class: 'btn ghost small', type: 'button', onClick: pickWallpaper }, icon('image'), bg.file ? 'Заменить' : 'Выбрать'),
+        bg.file && h('button', { class: 'btn ghost small', type: 'button', onClick: clearWallpaper }, 'Убрать'))));
+  }
+  if (bg.mode !== 'none') {
+    rows.push(
+      settingRow('Размытие', 'Чем больше, тем мягче фон',
+        slider({ min: 0, max: 40, value: bg.blur, unit: ' px',
+          onLive: (n) => { bg.blur = n; applyBackground(); },
+          onSave: (n) => saveSettingsPatch({ background: { blur: n } }) })),
+      settingRow('Затемнение', 'Помогает читать названия игр на светлых картинках',
+        slider({ min: 0, max: 90, value: bg.dim, unit: '%',
+          onLive: (n) => { bg.dim = n; applyBackground(); },
+          onSave: (n) => saveSettingsPatch({ background: { dim: n } }) })));
+  }
+  return settingsCard('Фон приложения', 'Верхний блок с игрой настраивается отдельно, в окне «Изменить» у игры', rows);
 }
 
 function libraryPanel() {
@@ -549,7 +668,8 @@ function renderSettings() {
       onClick: () => { state.settingsTab = t.id; render(); },
     }, icon(t.icon), t.label)));
   const panel = h('div', { class: 'settings-panel' },
-    state.settingsTab === 'about' ? aboutPanel() : libraryPanel());
+    state.settingsTab === 'about' ? aboutPanel()
+      : state.settingsTab === 'library' ? libraryPanel() : appearancePanel());
   return h('section', { class: 'section settings', style: 'margin-top:0' },
     h('div', { class: 'section-head' },
       h('div', {}, h('h2', {}, 'Настройки'), h('p', { class: 'settings-sub' }, 'Настройте приложение под себя'))),
@@ -1222,3 +1342,4 @@ invoke('get_version').then((v) => { $('.brand-text small').textContent = `v${v}`
 window.addEventListener('focus', syncMissing);
 
 refresh();
+loadSettings();

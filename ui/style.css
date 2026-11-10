@@ -462,3 +462,26 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .s-control { color: var(--muted); font-size: 14px; flex: none; max-width: 60%; min-width: 0; }
 .s-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
 .s-bad { color: var(--danger); font-weight: 600; }
+
+/* ---------- Фон приложения ---------- */
+.app-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: var(--bg); pointer-events: none; }
+.app-bg-img {
+  position: absolute; inset: 0; background-size: cover; background-position: center;
+  opacity: 0; transition: opacity 0.4s ease;
+}
+.app-bg.ready .app-bg-img { opacity: 1; }
+.app-bg-dim { position: absolute; inset: 0; background: #0d0d12; opacity: 0.4; }
+.shell { position: relative; z-index: 1; }
+
+/* Когда фон включён, боковая панель и карточки настроек слегка просвечивают. */
+.has-bg .sidebar { background: rgba(10, 10, 15, 0.62); backdrop-filter: blur(16px); }
+.has-bg .s-card { background: rgba(20, 20, 28, 0.62); backdrop-filter: blur(14px); }
+.has-bg .section-head h2, .has-bg .card-name, .has-bg .settings-sub { text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7); }
+/* Нижний край верхнего блока растворяется в фоне, а не в сплошном цвете. */
+.has-bg .hero-bg { -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%); mask-image: linear-gradient(to bottom, #000 58%, transparent 100%); }
+.has-bg .hero-bg::after { background: linear-gradient(to right, rgba(13, 13, 18, 0.7), rgba(13, 13, 18, 0) 65%); }
+
+.s-buttons { display: flex; gap: 8px; }
+.s-slider { display: flex; align-items: center; gap: 14px; }
+.s-range { width: 200px; accent-color: var(--accent); cursor: pointer; }
+.s-value { min-width: 54px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }

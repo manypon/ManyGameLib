@@ -188,9 +188,12 @@ function commit(next) {
 /* Лежат отдельно от списка игр: %USERPROFILE%\manypon\manygamelib\settings.json.
    Неизвестные ключи при чтении отбрасываются, неверные значения заменяются
    на значения по умолчанию, поэтому битый или чужой файл настроек ничего не ломает. */
-const BG_MODES = ['none', 'game', 'custom'];
+/* Фон приложения: свой слой за интерфейсом. default: картинка из папки ui/assets,
+   custom: картинка пользователя (копия в icons), none: сплошной цвет.
+   Фон «от игры» живёт только в верхнем блоке (настройки hero), а не здесь. */
+const BG_MODES = ['none', 'default', 'custom'];
 const SETTINGS_DEFAULTS = {
-  background: { mode: 'none', blur: 24, dim: 55, file: null }, // blur в px, dim в %
+  background: { mode: 'default', blur: 4, dim: 40, file: null }, // blur в px, dim в %
   autostart: false,
   logging: false,
   javaPath: '',
@@ -207,13 +210,16 @@ function normalizeSettings(raw) {
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const bg = r.background && typeof r.background === 'object' ? r.background : {};
   const d = SETTINGS_DEFAULTS;
+  // только имя файла внутри icons, без путей
+  const file = typeof bg.file === 'string' && bg.file && path.basename(bg.file) === bg.file ? bg.file : null;
+  let mode = BG_MODES.includes(bg.mode) ? bg.mode : d.background.mode;
+  if (mode === 'custom' && !file) mode = 'default'; // своей картинки нет: показываем стандартную
   return {
     background: {
-      mode: BG_MODES.includes(bg.mode) ? bg.mode : d.background.mode,
-      blur: toInt(bg.blur, 0, 60, d.background.blur),
+      mode,
+      blur: toInt(bg.blur, 0, 40, d.background.blur),
       dim: toInt(bg.dim, 0, 90, d.background.dim),
-      // только имя файла внутри icons, без путей
-      file: typeof bg.file === 'string' && bg.file && path.basename(bg.file) === bg.file ? bg.file : null,
+      file,
     },
     autostart: typeof r.autostart === 'boolean' ? r.autostart : d.autostart,
     logging: typeof r.logging === 'boolean' ? r.logging : d.logging,
@@ -574,6 +580,31 @@ function registerHandlers() {
       throw new Error('Неизвестная цель.');
     }
   });
+
+  /* Своя картинка для фона: копируем в папку библиотеки, включаем режим custom,
+     старый файл удаляем только после успешного сохранения. */
+  handle('set_wallpaper', ({ path: p }) => {
+    const name = copyImage(p, 'app', 'wallpaper');
+    const old = settings.background.file;
+    try {
+      saveSettings(normalizeSettings({ ...settings, background: { ...settings.background, mode: 'custom', file: name } }));
+    } catch (e) {
+      removeImage(name);
+      throw e;
+    }
+    removeImage(old);
+    return settings;
+  });
+
+  /* Убирает свою картинку; если она была включена, возвращается стандартный фон. */
+  handle('clear_wallpaper', () => {
+    const old = settings.background.file;
+    saveSettings(normalizeSettings({ ...settings, background: { ...settings.background, file: null } }));
+    removeImage(old);
+    return settings;
+  });
+
+  handle('get_wallpaper', () => readImage(settings.background.file));
 
   handle('get_settings', () => settings);
 
