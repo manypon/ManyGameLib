@@ -19,6 +19,8 @@ Or double-click `start.bat`: on first launch it runs `npm install` for you.
 
 ## Build the app
 
+Double-click `build.bat`: it closes a running copy of the app, installs dependencies if needed, removes the old build and runs the build. Or by hand:
+
 ```powershell
 npm run build
 ```
@@ -69,7 +71,8 @@ manygamelib/
 ├─ preload.js     safe bridge between the UI and main.js
 ├─ ui/            interface (index.html, style.css, app.js)
 ├─ build/         app icons
-└─ start.bat      double-click launcher
+├─ start.bat      double-click launcher
+└─ build.bat      double-click build
 ```
 
 ## License
