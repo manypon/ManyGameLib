@@ -71,9 +71,14 @@ manygamelib/
 ├─ preload.js     safe bridge between the UI and main.js
 ├─ ui/            interface (index.html, style.css, app.js)
 ├─ build/         app icons
+├─ docs/          technical documentation
 ├─ start.bat      double-click launcher
 └─ build.bat      double-click build
 ```
+
+## Documentation
+
+How the app works inside (architecture, storage and backups, images, launching, interface, build and release): [docs/](docs/README.md). Every page is in English and Russian.
 
 ## License
 
