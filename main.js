@@ -56,18 +56,102 @@ function migrateOldLibrary() {
   }
 }
 
+/* ---------- Чтение, резервные копии, восстановление ---------- */
+
+const BACKUPS_KEEP = 5;           // сколько копий «по одной за запуск» хранить
+const RETRY_CODES = new Set(['EBUSY', 'EPERM', 'EACCES', 'EMFILE', 'ENFILE', 'EAGAIN', 'UNKNOWN']);
+let backupsDir;
+let libraryNotice = null;         // что показать пользователю после старта
+
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/* Файл на секунду занят антивирусом или облачной синхронизацией: пробуем ещё. */
+function withRetry(fn, tries = 4, pause = 150) {
+  for (let i = 1; ; i++) {
+    try { return fn(); }
+    catch (e) {
+      if (i >= tries || !RETRY_CODES.has(e.code)) throw e;
+      sleepSync(pause * i);
+    }
+  }
+}
+
+class CorruptError extends Error {}
+
+/* Читает и проверяет файл. ENOENT пробрасывается как есть,
+   «не читается» (занят, нет доступа) — тоже, «битый» — CorruptError. */
+function readLibraryFile(file) {
+  const text = withRetry(() => fs.readFileSync(file, 'utf8'));
+  let parsed;
+  try { parsed = JSON.parse(text.replace(/^\uFEFF/, '')); }
+  catch { throw new CorruptError('файл не читается как JSON'); }
+  if (!Array.isArray(parsed)) throw new CorruptError('неверный формат');
+  return parsed;
+}
+
+function listBackups() {
+  try {
+    return fs.readdirSync(backupsDir)
+      .filter((n) => /^games-.*\.json$/.test(n))
+      .sort().reverse()
+      .map((n) => path.join(backupsDir, n));
+  } catch { return []; }
+}
+
+/* Последняя рабочая копия: сначала .bak (прошлое сохранение), потом папка backups. */
+function restoreFromBackup() {
+  for (const file of [dbPath + '.bak', ...listBackups()]) {
+    try { return { list: readLibraryFile(file), from: file }; } catch { /* пробуем следующую */ }
+  }
+  return null;
+}
+
+const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+
+/* Одна копия за запуск приложения, хранятся последние BACKUPS_KEEP. */
+function makeStartupBackup() {
+  if (!games.length) return;
+  try {
+    fs.mkdirSync(backupsDir, { recursive: true });
+    fs.copyFileSync(dbPath, path.join(backupsDir, `games-${stamp()}.json`));
+    for (const old of listBackups().slice(BACKUPS_KEEP)) {
+      try { fs.unlinkSync(old); } catch { /* ignore */ }
+    }
+  } catch { /* копия не критична */ }
+}
+
+/* Загружает библиотеку. Бросает ошибку, если файл не удалось прочитать
+   (занят, нет доступа): приложение тогда предложит повторить и не стартует с пустой. */
 function loadGames() {
   fs.mkdirSync(iconsDir, { recursive: true });
+  libraryNotice = null;
   try {
-    const parsed = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    if (!Array.isArray(parsed)) throw new Error('bad format');
-    games = parsed;
+    games = readLibraryFile(dbPath);
+    makeStartupBackup();
+    return;
   } catch (e) {
-    // Файла нет — это нормально (первый запуск). Файл битый — сохраняем копию.
-    if (e.code !== 'ENOENT') {
-      try { fs.copyFileSync(dbPath, dbPath + '.bak'); } catch { /* ignore */ }
+    if (!(e instanceof CorruptError) && e.code !== 'ENOENT') throw e;
+    if (e.code === 'ENOENT') {
+      // Нет файла: первый запуск. Но если рядом есть копии, значит файл потеряли — вернём.
+      const back = restoreFromBackup();
+      if (!back) { games = []; return; }
+      games = back.list;
+      saveGames();
+      libraryNotice = `Файл библиотеки не найден. Восстановлена последняя копия (${games.length} игр):\n${back.from}`;
+      return;
     }
-    games = [];
+    // Файл есть, но битый: не затираем его, а откладываем в сторону.
+    const kept = path.join(dataDir, `games.corrupt-${stamp()}.json`);
+    try { fs.renameSync(dbPath, kept); } catch { /* ignore */ }
+    const back = restoreFromBackup();
+    if (back) {
+      games = back.list;
+      saveGames();
+      libraryNotice = `Файл библиотеки был повреждён. Восстановлена последняя копия (${games.length} игр).\nПовреждённый файл сохранён здесь:\n${kept}`;
+    } else {
+      games = [];
+      libraryNotice = `Файл библиотеки был повреждён, а копий не нашлось. Начата пустая библиотека.\nПовреждённый файл сохранён здесь:\n${kept}`;
+    }
   }
 }
 
@@ -75,7 +159,9 @@ function saveGames() {
   const tmp = dbPath + '.tmp';
   try {
     fs.writeFileSync(tmp, JSON.stringify(games, null, 2));
-    fs.renameSync(tmp, dbPath);
+    // Прошлая версия остаётся как games.json.bak.
+    if (fs.existsSync(dbPath)) { try { fs.copyFileSync(dbPath, dbPath + '.bak'); } catch { /* ignore */ } }
+    withRetry(() => fs.renameSync(tmp, dbPath));
   } catch (e) {
     throw new Error(`Не удалось сохранить библиотеку: ${e.message}`);
   }
@@ -444,17 +530,33 @@ if (!app.requestSingleInstanceLock()) {
     dataDir = resolveDataDir();
     iconsDir = path.join(dataDir, 'icons');
     dbPath = path.join(dataDir, 'games.json');
-    try {
-      fs.mkdirSync(iconsDir, { recursive: true });
-      migrateOldLibrary();
-      loadGames();
-    } catch (e) {
-      dialog.showErrorBox('ManyGameLib', `Не удалось открыть папку библиотеки:\n${dataDir}\n\n${e.message}`);
-      app.quit();
-      return;
+    backupsDir = path.join(dataDir, 'backups');
+    // Не читается (занят, нет доступа)? Предлагаем повторить, с пустой библиотекой не стартуем.
+    for (;;) {
+      try {
+        fs.mkdirSync(iconsDir, { recursive: true });
+        migrateOldLibrary();
+        loadGames();
+        break;
+      } catch (e) {
+        const choice = dialog.showMessageBoxSync({
+          type: 'error',
+          title: 'ManyGameLib',
+          message: 'Не удалось открыть библиотеку',
+          detail: `${dbPath}\n\n${e.message}\n\nВозможно, файл занят другой программой. Ваши игры не потеряны.`,
+          buttons: ['Повторить', 'Выйти'],
+          defaultId: 0,
+          cancelId: 1,
+          noLink: true,
+        });
+        if (choice !== 0) { app.quit(); return; }
+      }
     }
     registerHandlers();
     createWindow();
+    if (libraryNotice) {
+      win.once('ready-to-show', () => dialog.showMessageBox(win, { type: 'warning', title: 'ManyGameLib', message: 'Библиотека восстановлена', detail: libraryNotice, buttons: ['OK'], noLink: true }));
+    }
   });
 
   app.on('window-all-closed', () => app.quit());

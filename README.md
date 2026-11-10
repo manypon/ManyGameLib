@@ -46,7 +46,10 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 
 - `games.json`: the list of games
 - `icons\`: copies of the icons you picked (they survive even if the original files are deleted)
-- If `games.json` gets corrupted, a copy is saved as `games.json.bak`.
+- `games.json.bak`: the previous version of the list, updated on every save
+- `backups\`: one copy of the list per app start, the last 5 are kept
+- If `games.json` is corrupted, it is renamed to `games.corrupt-<date>.json` (never overwritten) and the last good copy is restored automatically, with a notice.
+- If the file is locked by another program, the app offers "Retry" or "Exit" instead of starting with an empty library.
 
 To move your library to another computer, copy that whole folder. Game paths are absolute, so the games need to be at the same paths there.
 
