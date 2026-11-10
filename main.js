@@ -26,6 +26,11 @@ let win = null;
 let dataDir, iconsDir, dbPath;
 let games = [];
 
+/* Повторный запуск одной и той же игры в течение этого времени игнорируем
+   (на случай двойного нажатия). */
+const LAUNCH_LOCK_MS = 3000;
+const launchedAt = new Map(); // id игры -> когда её запустили
+
 /* ---------- Хранилище ---------- */
 
 /* Библиотека лежит в %USERPROFILE%\manypon\manygamelib (games.json и папка icons). */
@@ -344,10 +349,14 @@ function registerHandlers() {
 
   handle('launch_game', async ({ id }) => {
     const g = findGame(id);
+    const last = launchedAt.get(id);
+    if (last && Date.now() - last < LAUNCH_LOCK_MS) return view(g); // игра только что запущена
     if (!isFile(g.exe_path)) throw new Error(`Файл игры не найден: ${g.exe_path}`);
+    launchedAt.set(id, Date.now()); // ставим сразу, чтобы второй запрос не прошёл, пока идёт первый
     try {
       await spawnGame(g.exe_path);
     } catch (e) {
+      launchedAt.delete(id); // не запустилась, можно пробовать снова
       throw new Error(`Не удалось запустить игру: ${e.message}`);
     }
     g.last_played = Date.now();

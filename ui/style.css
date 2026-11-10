@@ -432,3 +432,7 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .btn:focus-visible, .nav-item:focus-visible, .opts button:focus-visible, .r-btn:focus-visible, .x-btn:focus-visible {
   outline: 2px solid rgba(122, 92, 255, 0.8); outline-offset: 2px;
 }
+
+/* ---------- Игра запускается: повторные нажатия отключены ---------- */
+.play-fab.is-launching { opacity: 1; transform: none; filter: saturate(0.4) brightness(0.85); cursor: progress; }
+.r-btn.play.is-launching { opacity: 0.6; cursor: progress; }

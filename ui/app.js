@@ -174,14 +174,44 @@ async function loadAssets(id) {
   if (state.heroId === id) render();
 }
 
+/* ---------- Защита от повторного запуска ---------- */
+
+const LAUNCH_LOCK_MS = 3000;
+const launching = new Map(); // id игры -> таймер, который снимет блокировку
+
+/* Кнопки запуска игры, которая сейчас запускается, отключаем и подписываем «Запускается…». */
+function refreshLaunchButtons() {
+  document.querySelectorAll('[data-launch-id]').forEach((el) => {
+    const busy = launching.has(el.dataset.launchId);
+    el.disabled = busy;
+    el.classList.toggle('is-launching', busy);
+    const label = el.querySelector('.btn-label');
+    if (label) label.textContent = busy ? 'Запускается…' : 'Запустить';
+  });
+}
+
+function lockLaunch(id) {
+  clearTimeout(launching.get(id));
+  launching.set(id, setTimeout(() => unlockLaunch(id), LAUNCH_LOCK_MS));
+  refreshLaunchButtons();
+}
+
+function unlockLaunch(id) {
+  clearTimeout(launching.get(id));
+  launching.delete(id);
+  refreshLaunchButtons();
+}
+
 async function launch(id) {
   const game = state.games.find((g) => g.id === id);
-  if (!game) return;
+  if (!game || launching.has(id)) return; // уже запускается: повторное нажатие игнорируем
+  lockLaunch(id);
   try {
     const updated = await invoke('launch_game', { id });
     upsert(updated);
     toast(`Запускаю «${game.name}»`);
   } catch (e) {
+    unlockLaunch(id); // не запустилась: даём попробовать сразу
     toast(errText(e), 'error');
     await refresh();
     return;
@@ -272,6 +302,7 @@ function render() {
   }
 
   content.scrollTop = scroll;
+  refreshLaunchButtons();
 }
 
 /* Первый запуск: библиотека пуста — просим добавить первую игру. */
@@ -377,7 +408,8 @@ function heroNode(g, { preview = false, dots = null } = {}) {
       h('p', { class: 'hero-sub' }, g.last_played ? formatLast(g.last_played) : 'Ещё не запускалась'),
       h('p', { class: 'hero-path', title: g.exe_path }, g.exe_path),
       h('div', { class: 'hero-actions' },
-        h('button', { class: 'btn primary', type: 'button', onClick: go(() => launch(g.id)) }, icon('play'), 'Запустить'),
+        h('button', { class: 'btn primary', type: 'button', 'data-launch-id': preview ? null : g.id, onClick: go(() => launch(g.id)) },
+          icon('play'), h('span', { class: 'btn-label' }, 'Запустить')),
         h('button', { class: 'btn ghost', type: 'button', onClick: go(() => openDetails(g.id)) }, icon('info'), 'Подробнее'),
         h('button', { class: 'btn ghost icon', type: 'button', title: 'Ещё', 'data-menu-trigger': true, onClick: go((e) => openMenu(e, g)) }, icon('more')))),
     dots && dots.length > 1 && h('div', { class: 'hero-dots' },
@@ -463,7 +495,7 @@ function card(game, { chip = false, hero = false } = {}) {
       game.favorite && h('span', { class: 'fav-badge', html: ICON.star }),
       chip && h('span', { class: 'chip' }, icon('clock'), formatLast(game.last_played)),
       h('button', {
-        class: 'play-fab', title: 'Запустить', type: 'button',
+        class: 'play-fab', title: 'Запустить', type: 'button', 'data-launch-id': game.id,
         onClick: (e) => { e.stopPropagation(); launch(game.id); },
         onDblclick: (e) => e.stopPropagation(),
       }, icon('play'))),
@@ -494,7 +526,7 @@ function row(game, hero) {
       h('div', { class: 'r-path', title: game.exe_path }, game.missing ? 'Файл не найден — ' + game.exe_path : game.exe_path)),
     h('div', { class: 'r-time' }, formatLast(game.last_played)),
     h('button', { class: 'r-btn', type: 'button', title: 'Ещё', 'data-menu-trigger': true, onClick: (e) => { e.stopPropagation(); openMenu(e, game); } }, icon('more')),
-    h('button', { class: 'r-btn play', type: 'button', title: 'Запустить', onClick: (e) => { e.stopPropagation(); launch(game.id); } }, icon('play')));
+    h('button', { class: 'r-btn play', type: 'button', title: 'Запустить', 'data-launch-id': game.id, onClick: (e) => { e.stopPropagation(); launch(game.id); } }, icon('play')));
 }
 
 /* ---------- Навигация ---------- */
