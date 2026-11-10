@@ -594,6 +594,7 @@ function row(game, hero) {
 function setView(view) {
   state.view = view;
   state.query = '';
+  cancelSearchDebounce();
   $('#search').value = '';
   render();
   $('#content').scrollTop = 0;
@@ -709,6 +710,7 @@ function openAddModal() {
         state.selectedId = game.id;
         state.view = 'library';
         state.query = '';
+        cancelSearchDebounce();
         $('#search').value = '';
         render();
         $('#content').scrollTop = 0;
@@ -1102,9 +1104,24 @@ $('#nav').addEventListener('click', (e) => {
   if (btn) setView(btn.dataset.view);
 });
 
-$('#search').addEventListener('input', (e) => {
-  state.query = e.target.value;
-  render();
+/* Поиск перерисовывает весь экран, поэтому ждём паузу в наборе, а не реагируем на каждую букву. */
+const SEARCH_DEBOUNCE_MS = 150;
+let searchTimer = null;
+
+function cancelSearchDebounce() {
+  clearTimeout(searchTimer);
+  searchTimer = null;
+}
+
+$('#search').addEventListener('input', () => {
+  cancelSearchDebounce();
+  searchTimer = setTimeout(() => {
+    searchTimer = null;
+    const q = $('#search').value;
+    if (q === state.query) return;
+    state.query = q;
+    render();
+  }, SEARCH_DEBOUNCE_MS);
 });
 
 $('#wMin').addEventListener('click', () => appWindow.minimize());
