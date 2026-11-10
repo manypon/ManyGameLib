@@ -35,7 +35,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu.
-- Supported files: `.exe`, `.jar` (runs through Java, which must be installed), `.lnk` and `.url` shortcuts, plus `.bat`, `.cmd` and `.msi`. Any other file opens with the program Windows has assigned to it.
+- Supported files: `.exe`, `.jar` (runs through Java, which must be installed; the app looks for `javaw` in PATH, `JAVA_HOME`, the Windows registry and the usual Program Files folders), `.lnk` and `.url` shortcuts, plus `.bat`, `.cmd` and `.msi`. Any other file opens with the program Windows has assigned to it.
 - Games start in their own folder. If a game needs administrator rights, Windows shows the UAC prompt.
 - "Remove from library" deletes only the library entry. Your game files are never touched.
 - If a game file is moved or deleted, its tile shows a "File not found" badge.

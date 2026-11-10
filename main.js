@@ -4,7 +4,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'ico', 'bmp', 'gif'];
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -331,20 +331,104 @@ function spawnProcess(cmd, args, cwd) {
   });
 }
 
+/* ---------- Поиск Java для .jar ---------- */
+
+const JAVAW = 'javaw.exe';
+
+/* Из строки реестра вида `"C:\...\javaw.exe" -jar "%1" %*` берём путь к javaw.
+   Если .jar сопоставлен с архиватором, а не с Java, вернём null. */
+function javawFromCommand(text) {
+  const m = /"([^"]*javaw\.exe)"/i.exec(String(text || '')) || /^\s*(\S*javaw\.exe)\b/im.exec(String(text || ''));
+  return m ? m[1] : null;
+}
+
+function regQuery(args) {
+  return new Promise((resolve) => {
+    execFile('reg', ['query', ...args], { windowsHide: true, timeout: 4000 },
+      (err, stdout) => resolve(err ? '' : String(stdout)));
+  });
+}
+
+/* Версия из имени папки: jdk-17.0.2 -> [17,0,2], jre1.8.0_300 -> [8,0,300] (старое «1.8» это Java 8). */
+function javaVersionOf(name) {
+  const nums = (String(name).match(/\d+/g) || []).map(Number);
+  if (nums.length > 1 && nums[0] === 1) nums.shift();
+  return nums;
+}
+
+function cmpJavaVersion(a, b) {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] || 0) - (b[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/* Ищет javaw.exe: PATH, JAVA_HOME, реестр, типичные папки Program Files.
+   Окно архиватора больше не открываем: нет Java, так нет, говорим об этом прямо. */
+async function findJavaw() {
+  const found = (p) => (p && isFile(p) ? p : null);
+
+  // 1. PATH
+  for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
+    const hit = dir && found(path.join(dir.replace(/^"|"$/g, ''), JAVAW));
+    if (hit) return hit;
+  }
+  // 2. JAVA_HOME и JRE_HOME
+  for (const key of ['JAVA_HOME', 'JRE_HOME']) {
+    const home = process.env[key];
+    const hit = home && found(path.join(home.replace(/^"|"$/g, ''), 'bin', JAVAW));
+    if (hit) return hit;
+  }
+  // 3. Реестр Windows
+  if (process.platform === 'win32') {
+    const jar = javawFromCommand(await regQuery(['HKCR\\jarfile\\shell\\open\\command', '/ve']));
+    if (found(jar)) return jar;
+    for (const key of ['HKLM\\SOFTWARE\\JavaSoft', 'HKLM\\SOFTWARE\\WOW6432Node\\JavaSoft']) {
+      const out = await regQuery([key, '/s', '/v', 'JavaHome']);
+      for (const line of out.split(/\r?\n/)) {
+        const m = /JavaHome\s+REG_SZ\s+(.+?)\s*$/i.exec(line);
+        const hit = m && found(path.join(m[1], 'bin', JAVAW));
+        if (hit) return hit;
+      }
+    }
+  }
+  // 4. Типичные папки установки (новые версии сверху)
+  const roots = [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramW6432]
+    .filter(Boolean);
+  const vendors = ['Java', 'Eclipse Adoptium', 'Microsoft', 'Zulu', 'BellSoft', 'Amazon Corretto', 'Semeru', 'Temurin'];
+  for (const root of [...new Set(roots)]) {
+    for (const vendor of vendors) {
+      const base = path.join(root, vendor);
+      let names;
+      try { names = fs.readdirSync(base); } catch { continue; }
+      names.sort((x, y) => cmpJavaVersion(javaVersionOf(y), javaVersionOf(x)));
+      for (const name of names) {
+        const hit = found(path.join(base, name, 'bin', JAVAW));
+        if (hit) return hit;
+      }
+    }
+  }
+  return null;
+}
+
 /* Как запускаем разные типы файлов:
    - exe, com: напрямую в папке игры; если Windows отказывает (например, нужны
      права администратора), через оболочку — она сама покажет окно UAC;
-   - jar: через Java (javaw -jar); если Java нет в PATH, пробуем открыть так,
-     как это делает Windows по двойному клику;
+   - jar: через найденный javaw (-jar), без обращения к программе, назначенной в Windows;
    - всё остальное (lnk, bat, cmd, url, msi…): через оболочку Windows. */
 async function spawnGame(file) {
   const ext = extOf(file);
   const cwd = path.dirname(file);
 
   if (ext === 'jar') {
-    try { await spawnProcess('javaw', ['-jar', file], cwd); return; } catch { /* нет javaw в PATH */ }
-    try { await openViaShell(file); return; } catch { /* нет сопоставления с Java */ }
-    throw new Error('Не удалось запустить .jar. Установите Java (JRE 8 или новее) и повторите.');
+    const javaw = await findJavaw();
+    if (!javaw) {
+      throw new Error('Java не найдена. Установите Java (JRE 8 или новее) или задайте переменную JAVA_HOME, затем повторите.');
+    }
+    try { await spawnProcess(javaw, ['-jar', file], cwd); }
+    catch (e) { throw new Error(`Не удалось запустить Java (${javaw}): ${e.message}`); }
+    return;
   }
 
   if (ext === 'exe' || ext === 'com') {
