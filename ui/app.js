@@ -20,11 +20,13 @@ const state = {
   games: [],
   assets: {},           // id -> { icon, banner, logo }: тяжёлые картинки, грузим по требованию
   heroId: null,         // игра, которая сейчас показана в верхнем блоке
-  view: 'library',      // library | favorites | recent
+  view: 'library',      // library | favorites | recent | settings
   query: '',
   sort: 'name',         // name | added | played
   layout: 'grid',       // grid | list
   selectedId: null,
+  settingsTab: 'library', // вкладка страницы настроек: library | about
+  appInfo: null,        // сведения о приложении для вкладки «О приложении»
 };
 
 /* ---------- Утилиты ---------- */
@@ -63,6 +65,7 @@ const ICON = {
   close: svg('<path d="m5 5 14 14M19 5 5 19"/>'),
   grid: svg('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
   list: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+  folder: svg('<path d="M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/>'),
   image: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/>'),
 };
 
@@ -289,6 +292,9 @@ function render() {
   } else if (state.query.trim()) {
     content.classList.add('pad-top');
     content.append(renderSearch());
+  } else if (state.view === 'settings') {
+    content.classList.add('pad-top');
+    content.append(renderSettings());
   } else if (state.view === 'favorites') {
     content.classList.add('pad-top');
     content.append(renderSimple('Избранное', state.games.filter((g) => g.favorite).sort(byName),
@@ -466,6 +472,88 @@ function renderSearch() {
     section.append(h('div', { class: 'grid' }, found.map((g) => card(g, {}))));
   }
   return section;
+}
+
+/* ---------- Страница настроек ---------- */
+
+const SETTINGS_TABS = [
+  { id: 'library', label: 'Библиотека', icon: 'folder' },
+  { id: 'about', label: 'О приложении', icon: 'info' },
+];
+
+let appInfoPending = false;
+function ensureAppInfo() {
+  if (state.appInfo || appInfoPending) return;
+  appInfoPending = true;
+  invoke('get_app_info')
+    .then((info) => { state.appInfo = info; })
+    .catch((e) => toast(errText(e), 'error'))
+    .finally(() => { appInfoPending = false; if (state.view === 'settings') render(); });
+}
+
+async function openTarget(target) {
+  try { await invoke('open_external', { target }); } catch (e) { toast(errText(e), 'error'); }
+}
+
+/* Карточка с заголовком и строками «название слева, значение или кнопка справа». */
+function settingsCard(title, subtitle, ...rows) {
+  return h('section', { class: 's-card' },
+    h('div', { class: 's-card-head' }, h('h3', {}, title), subtitle && h('p', {}, subtitle)),
+    rows);
+}
+
+function settingRow(title, hint, control) {
+  return h('div', { class: 's-row' },
+    h('div', { class: 's-text' }, h('b', {}, title), hint && h('span', {}, hint)),
+    h('div', { class: 's-control' }, control));
+}
+
+function libraryPanel() {
+  ensureAppInfo();
+  const total = state.games.length;
+  const missing = state.games.filter((g) => g.missing).length;
+  const dir = state.appInfo ? state.appInfo.dataDir : '…';
+  return [
+    settingsCard('Библиотека', 'Сколько игр и где лежат данные',
+      settingRow('Игр в библиотеке', null, `${total}`),
+      settingRow('Файл не найден', 'Игры, файлы которых переместили или удалили',
+        h('span', { class: missing ? 's-bad' : '' }, `${missing}`)),
+      settingRow('Папка данных', h('span', { class: 's-path', title: dir }, dir),
+        h('button', { class: 'btn ghost small', type: 'button', onClick: () => openTarget('data') }, icon('folder'), 'Открыть папку'))),
+    settingsCard('Защита данных', 'Список игр хранится безопасно',
+      settingRow('Предыдущая версия списка', 'Файл games.json.bak, обновляется при каждом сохранении', null),
+      settingRow('Копии за запуски', 'Папка backups: по одной копии за запуск, последние 5', null),
+      settingRow('Если файл повредится', 'Он сохранится отдельно, а последняя рабочая копия восстановится сама', null)),
+  ];
+}
+
+function aboutPanel() {
+  ensureAppInfo();
+  const i = state.appInfo;
+  const v = (x) => (i ? x : '…');
+  return settingsCard('ManyGameLib', 'Локальная библиотека игр для Windows',
+    settingRow('Версия', null, v(i && `v${i.version}`)),
+    settingRow('Electron', null, v(i && i.electron)),
+    settingRow('Chromium', null, v(i && i.chrome)),
+    settingRow('Node.js', null, v(i && i.node)),
+    settingRow('Лицензия', null, v(i && i.license)),
+    settingRow('Исходный код', 'Страница проекта на GitHub',
+      h('button', { class: 'btn ghost small', type: 'button', onClick: () => openTarget('repo') }, 'Открыть на GitHub')));
+}
+
+function renderSettings() {
+  const tabs = h('nav', { class: 'settings-tabs' },
+    SETTINGS_TABS.map((t) => h('button', {
+      class: 'settings-tab' + (t.id === state.settingsTab ? ' active' : ''),
+      type: 'button',
+      onClick: () => { state.settingsTab = t.id; render(); },
+    }, icon(t.icon), t.label)));
+  const panel = h('div', { class: 'settings-panel' },
+    state.settingsTab === 'about' ? aboutPanel() : libraryPanel());
+  return h('section', { class: 'section settings', style: 'margin-top:0' },
+    h('div', { class: 'section-head' },
+      h('div', {}, h('h2', {}, 'Настройки'), h('p', { class: 'settings-sub' }, 'Настройте приложение под себя'))),
+    h('div', { class: 'settings-body' }, tabs, panel));
 }
 
 /* ---------- Карточки ---------- */

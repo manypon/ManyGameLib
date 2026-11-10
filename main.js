@@ -6,6 +6,9 @@ const os = require('os');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 
+const REPO_URL = 'https://github.com/manypon/ManyGameLib';
+const LICENSE_NAME = 'MIT';
+
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'ico', 'bmp', 'gif'];
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MIME = {
@@ -548,6 +551,30 @@ function handle(channel, fn) {
 function registerHandlers() {
   handle('get_version', () => app.getVersion());
 
+  /* Сведения для страницы «О приложении». */
+  handle('get_app_info', () => ({
+    version: app.getVersion(),
+    dataDir,
+    repo: REPO_URL,
+    license: LICENSE_NAME,
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    node: process.versions.node,
+  }));
+
+  /* Открывает папку данных или страницу проекта. Интерфейс передаёт только название цели,
+     а не адрес или путь: произвольные ссылки и файлы отсюда открыть нельзя. */
+  handle('open_external', async ({ target }) => {
+    if (target === 'data') {
+      const err = await shell.openPath(dataDir);
+      if (err) throw new Error(`Не удалось открыть папку: ${err}`);
+    } else if (target === 'repo') {
+      await shell.openExternal(REPO_URL);
+    } else {
+      throw new Error('Неизвестная цель.');
+    }
+  });
+
   handle('get_settings', () => settings);
 
   handle('save_settings', ({ patch }) => {
@@ -695,6 +722,9 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
+  // Страница не должна уходить на другие адреса и открывать новые окна: ссылки открывает только main.js.
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.once('ready-to-show', () => win.show());
 
   // Интерфейс рисует свою кнопку «развернуть/восстановить», ему нужно знать состояние окна.

@@ -436,3 +436,29 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 /* ---------- Игра запускается: повторные нажатия отключены ---------- */
 .play-fab.is-launching { opacity: 1; transform: none; filter: saturate(0.4) brightness(0.85); cursor: progress; }
 .r-btn.play.is-launching { opacity: 0.6; cursor: progress; }
+
+
+/* ---------- Страница настроек ---------- */
+.settings-sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.settings-body { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; align-items: start; max-width: 1060px; }
+.settings-tabs { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; }
+.settings-tab {
+  display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 14px;
+  border-radius: 11px; color: var(--muted); font-weight: 600; font-size: 14px; text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+.settings-tab svg { width: 19px; height: 19px; flex: none; }
+.settings-tab:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+.settings-tab.active { background: var(--accent-soft); color: #fff; box-shadow: inset 0 0 0 1px rgba(122, 92, 255, 0.35); }
+.settings-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.s-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.s-card-head { padding: 18px 20px 14px; }
+.s-card-head h3 { font-size: 16px; font-weight: 700; }
+.s-card-head p { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.s-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 13px 20px; border-top: 1px solid var(--border); min-height: 52px; }
+.s-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.s-text b { font-size: 14px; font-weight: 600; }
+.s-text > span { color: var(--muted); font-size: 12.5px; min-width: 0; }
+.s-control { color: var(--muted); font-size: 14px; flex: none; max-width: 60%; min-width: 0; }
+.s-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+.s-bad { color: var(--danger); font-weight: 600; }
