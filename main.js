@@ -180,6 +180,96 @@ function commit(next) {
   }
 }
 
+/* ---------- Настройки приложения ---------- */
+
+/* Лежат отдельно от списка игр: %USERPROFILE%\manypon\manygamelib\settings.json.
+   Неизвестные ключи при чтении отбрасываются, неверные значения заменяются
+   на значения по умолчанию, поэтому битый или чужой файл настроек ничего не ломает. */
+const BG_MODES = ['none', 'game', 'custom'];
+const SETTINGS_DEFAULTS = {
+  background: { mode: 'none', blur: 24, dim: 55, file: null }, // blur в px, dim в %
+  autostart: false,
+  logging: false,
+  javaPath: '',
+};
+const toInt = (v, lo, hi, fallback) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
+};
+
+let settingsPath;
+let settings = normalizeSettings({});
+
+function normalizeSettings(raw) {
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const bg = r.background && typeof r.background === 'object' ? r.background : {};
+  const d = SETTINGS_DEFAULTS;
+  return {
+    background: {
+      mode: BG_MODES.includes(bg.mode) ? bg.mode : d.background.mode,
+      blur: toInt(bg.blur, 0, 60, d.background.blur),
+      dim: toInt(bg.dim, 0, 90, d.background.dim),
+      // только имя файла внутри icons, без путей
+      file: typeof bg.file === 'string' && bg.file && path.basename(bg.file) === bg.file ? bg.file : null,
+    },
+    autostart: typeof r.autostart === 'boolean' ? r.autostart : d.autostart,
+    logging: typeof r.logging === 'boolean' ? r.logging : d.logging,
+    javaPath: typeof r.javaPath === 'string' ? r.javaPath.trim().slice(0, 500) : d.javaPath,
+  };
+}
+
+function readSettingsFile(file) {
+  const text = withRetry(() => fs.readFileSync(file, 'utf8'));
+  let parsed;
+  try { parsed = JSON.parse(text.replace(/^\uFEFF/, '')); }
+  catch { throw new CorruptError('файл не читается как JSON'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new CorruptError('неверный формат');
+  return parsed;
+}
+
+/* Настройки не критичны: что бы ни случилось, приложение стартует (с настройками по
+   умолчанию). Битый файл откладываем в сторону, а не затираем; сначала пробуем .bak. */
+function loadSettings() {
+  try {
+    settings = normalizeSettings(readSettingsFile(settingsPath));
+    return;
+  } catch (e) {
+    if (e.code === 'ENOENT') { settings = normalizeSettings({}); return; }
+    if (e instanceof CorruptError) {
+      try { fs.renameSync(settingsPath, path.join(dataDir, `settings.corrupt-${stamp()}.json`)); } catch { /* ignore */ }
+    }
+  }
+  try { settings = normalizeSettings(readSettingsFile(settingsPath + '.bak')); }
+  catch { settings = normalizeSettings({}); }
+}
+
+function saveSettings(next) {
+  const tmp = settingsPath + '.tmp';
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
+    if (fs.existsSync(settingsPath)) { try { fs.copyFileSync(settingsPath, settingsPath + '.bak'); } catch { /* ignore */ } }
+    withRetry(() => fs.renameSync(tmp, settingsPath));
+  } catch (e) {
+    throw new Error(`Не удалось сохранить настройки: ${e.message}`);
+  }
+  settings = next;
+}
+
+/* Применяет изменения поверх текущих. Менять можно только известные поля;
+   имя файла фона (background.file) интерфейс напрямую не задаёт. */
+function mergeSettings(patch) {
+  const p = patch && typeof patch === 'object' ? patch : {};
+  const bg = p.background && typeof p.background === 'object' ? p.background : {};
+  return normalizeSettings({
+    ...settings,
+    ...Object.fromEntries(['autostart', 'logging', 'javaPath'].filter((k) => k in p).map((k) => [k, p[k]])),
+    background: {
+      ...settings.background,
+      ...Object.fromEntries(['mode', 'blur', 'dim'].filter((k) => k in bg).map((k) => [k, bg[k]])),
+    },
+  });
+}
+
 const extOf = (p) => path.extname(String(p || '')).slice(1).toLowerCase();
 const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const hasImage = (name) => !!name && isFile(path.join(iconsDir, name));
@@ -458,6 +548,21 @@ function handle(channel, fn) {
 function registerHandlers() {
   handle('get_version', () => app.getVersion());
 
+  handle('get_settings', () => settings);
+
+  handle('save_settings', ({ patch }) => {
+    saveSettings(mergeSettings(patch));
+    return settings;
+  });
+
+  /* Возвращает настройки по умолчанию. Файл своего фона, если он был, удаляем. */
+  handle('reset_settings', () => {
+    const oldFile = settings.background.file;
+    saveSettings(normalizeSettings({}));
+    removeImage(oldFile);
+    return settings;
+  });
+
   handle('get_games', () => games.map(view));
 
   /* Только id игр, файлы которых не найдены (дешёвая проверка при возврате в окно). */
@@ -615,6 +720,7 @@ if (!app.requestSingleInstanceLock()) {
     iconsDir = path.join(dataDir, 'icons');
     dbPath = path.join(dataDir, 'games.json');
     backupsDir = path.join(dataDir, 'backups');
+    settingsPath = path.join(dataDir, 'settings.json');
     // Не читается (занят, нет доступа)? Предлагаем повторить, с пустой библиотекой не стартуем.
     for (;;) {
       try {
@@ -636,6 +742,7 @@ if (!app.requestSingleInstanceLock()) {
         if (choice !== 0) { app.quit(); return; }
       }
     }
+    loadSettings();
     registerHandlers();
     createWindow();
     if (libraryNotice) {
