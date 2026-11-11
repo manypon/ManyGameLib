@@ -521,6 +521,7 @@ function applyBackground() {
   const root = $('#appBg');
   const bg = state.settings && state.settings.background;
   if (!bg) return;
+  document.body.classList.toggle('hero-flat', state.settings.heroBackground === false);
   const on = bg.mode !== 'none';
   document.body.classList.toggle('has-bg', on);
   root.classList.toggle('ready', on);
@@ -582,6 +583,13 @@ async function clearWallpaper() {
   render();
 }
 
+/* Переключатель «вкл / выкл». */
+function toggle(value, onChange) {
+  const input = h('input', { type: 'checkbox', onChange: (e) => onChange(e.target.checked) });
+  input.checked = !!value;
+  return h('label', { class: 'switch' }, input, h('span', { class: 'switch-knob' }));
+}
+
 /* Ползунок: во время движения меняем фон сразу, сохраняем, когда отпустили. */
 function slider({ min, max, step = 1, value, unit, onLive, onSave }) {
   const label = h('span', { class: 's-value' }, `${value}${unit}`);
@@ -624,7 +632,14 @@ function appearancePanel() {
           onLive: (n) => { bg.dim = n; applyBackground(); },
           onSave: (n) => saveSettingsPatch({ background: { dim: n } }) })));
   }
-  return settingsCard('Фон приложения', 'Верхний блок с игрой настраивается отдельно, в окне «Изменить» у игры', rows);
+  const heroCard = settingsCard('Верхний блок', 'Большой блок с последней игрой над списком',
+    settingRow('Фон верхнего блока', 'Если выключить, название и кнопки лежат прямо на фоне приложения, без карточки',
+      toggle(state.settings.heroBackground, (on) => {
+        state.settings.heroBackground = on;
+        applyBackground();
+        saveSettingsPatch({ heroBackground: on });
+      })));
+  return [settingsCard('Фон приложения', 'Картинка за всем интерфейсом', rows), heroCard];
 }
 
 function libraryPanel() {

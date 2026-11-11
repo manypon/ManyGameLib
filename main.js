@@ -194,6 +194,7 @@ function commit(next) {
 const BG_MODES = ['none', 'default', 'custom'];
 const SETTINGS_DEFAULTS = {
   background: { mode: 'default', blur: 4, dim: 40, file: null }, // blur в px, dim в %
+  heroBackground: true,  // фон-карточка верхнего блока; выкл: текст лежит прямо на фоне приложения
   autostart: false,
   logging: false,
   javaPath: '',
@@ -221,6 +222,7 @@ function normalizeSettings(raw) {
       dim: toInt(bg.dim, 0, 90, d.background.dim),
       file,
     },
+    heroBackground: typeof r.heroBackground === 'boolean' ? r.heroBackground : d.heroBackground,
     autostart: typeof r.autostart === 'boolean' ? r.autostart : d.autostart,
     logging: typeof r.logging === 'boolean' ? r.logging : d.logging,
     javaPath: typeof r.javaPath === 'string' ? r.javaPath.trim().slice(0, 500) : d.javaPath,
@@ -271,7 +273,7 @@ function mergeSettings(patch) {
   const bg = p.background && typeof p.background === 'object' ? p.background : {};
   return normalizeSettings({
     ...settings,
-    ...Object.fromEntries(['autostart', 'logging', 'javaPath'].filter((k) => k in p).map((k) => [k, p[k]])),
+    ...Object.fromEntries(['heroBackground', 'autostart', 'logging', 'javaPath'].filter((k) => k in p).map((k) => [k, p[k]])),
     background: {
       ...settings.background,
       ...Object.fromEntries(['mode', 'blur', 'dim'].filter((k) => k in bg).map((k) => [k, bg[k]])),

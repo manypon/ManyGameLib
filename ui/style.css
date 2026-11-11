@@ -494,3 +494,18 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .s-slider { display: flex; align-items: center; gap: 14px; }
 .s-range { width: 200px; accent-color: var(--accent); cursor: pointer; }
 .s-value { min-width: 54px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Верхний блок без фона: название и кнопки лежат прямо на фоне приложения. */
+.hero-flat .content > .hero .hero-bg { display: none; }
+.hero-flat .content > .hero { border-color: transparent; box-shadow: none; background: none; }
+.has-bg.hero-flat .content > .hero { padding-left: 0; padding-right: 0; }
+.hero-flat .content > .hero :is(.hero-title, .hero-sub, .hero-path, .hero-eyebrow) { text-shadow: 0 1px 14px rgba(0, 0, 0, 0.85); }
+
+/* Переключатель */
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; cursor: pointer; }
+.switch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch-knob { position: absolute; inset: 0; border-radius: 12px; background: rgba(255, 255, 255, 0.14); transition: background 0.18s; }
+.switch-knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.18s; }
+.switch input:checked + .switch-knob { background: var(--accent); }
+.switch input:checked + .switch-knob::after { transform: translateX(20px); }
+.switch input:focus-visible + .switch-knob { outline: 2px solid var(--accent); outline-offset: 2px; }
