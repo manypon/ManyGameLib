@@ -2,7 +2,7 @@
 
 [English](ui.md) | [Русский](ui_RU.md)
 
-The interface is plain HTML, CSS and one script, `ui/app.js` (about 1100 lines). There is no framework and no build step. This page explains how it is structured and the few non-obvious decisions in it.
+The interface is plain HTML, CSS and one script, `ui/app.js` (about 1400 lines). There is no framework and no build step. This page explains how it is structured and the few non-obvious decisions in it.
 
 ## State
 
@@ -13,11 +13,15 @@ All UI state lives in one object:
 | `games` | The list returned by `get_games` |
 | `assets` | `id → { icon, banner, logo }` for heavy images, loaded on demand |
 | `heroId` | The game currently shown in the top block (`null` if there is no top block on screen) |
-| `view` | `library`, `favorites` or `recent` |
+| `view` | `library`, `favorites`, `recent` or `settings` |
 | `query` | The search text |
 | `sort` | `name`, `added` or `played` |
 | `layout` | `grid` or `list` |
 | `selectedId` | The game the user picked for the top block |
+| `settings` | The settings object from `get_settings` (see [Settings](settings.md)) |
+| `wallpaper` | The user's own app background as a data URL, loaded only in `custom` mode |
+| `settingsTab` | The open tab of the Settings page (`general`, `appearance`, `library`, `about`) |
+| `appInfo` | Version, data folder and runtime versions from `get_app_info`, loaded once |
 
 The source of truth for the library is the main process. After each command the UI replaces the updated game in `state.games` (`upsert`) or reloads the list (`refresh`).
 
@@ -68,6 +72,10 @@ Every launch button carries `data-launch-id`. `refreshLaunchButtons()` runs afte
 - **Add/edit form** (`gameForm`) keeps its own local state: the chosen file, the name (auto-filled from the file name until the user types their own), the three images and the top-block settings. On submit it sends one `add_game` or `update_game` request. Errors come back as text and are shown inside the form.
 - **Toasts** show short results and errors.
 - **Deleting a game** asks for confirmation, and removes only the library entry.
+
+## Settings page and app background
+
+The Settings page is one more value of `view`, drawn by `renderSettings()` with four tabs. A layer behind the interface (`#appBg`) shows the app background, and `applyBackground()` updates it. Sliders change only the style while dragging and save once on release, so there is no re-render and no write per pixel. `body.has-bg` and `body.hero-flat` switch the look of the sidebar, the cards and the top block. All of this is described in [Settings](settings.md).
 
 ## Title bar
 

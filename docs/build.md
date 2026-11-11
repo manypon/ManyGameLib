@@ -91,6 +91,7 @@ manygamelib/
 ├─ main.js         main process
 ├─ preload.js      bridge between the UI and main.js
 ├─ ui/             index.html, style.css, app.js
+│  └─ assets/      wallpaper-default.webp (default app background)
 ├─ build/          icon.png, icon.ico
 ├─ docs/           this documentation
 ├─ .github/        GitHub Actions workflows

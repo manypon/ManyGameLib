@@ -91,6 +91,7 @@ manygamelib/
 ├─ main.js         главный процесс
 ├─ preload.js      мост между интерфейсом и main.js
 ├─ ui/             index.html, style.css, app.js
+│  └─ assets/      wallpaper-default.webp (фон приложения по умолчанию)
 ├─ build/          icon.png, icon.ico
 ├─ docs/           эта документация
 ├─ .github/        workflow'ы GitHub Actions

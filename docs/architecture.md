@@ -19,7 +19,7 @@ ManyGameLib is a small Electron app with three parts and no runtime dependencies
 
 | File | Process | Responsibility |
 |------|---------|----------------|
-| `main.js` | main | Library storage, backups, image copies, launching games, native dialogs, the window |
+| `main.js` | main | Library storage, backups, settings, logging, autostart, image copies, launching games, native dialogs, the window |
 | `preload.js` | preload (isolated) | Exposes `window.api` to the page with a fixed set of commands |
 | `ui/index.html`, `ui/style.css`, `ui/app.js` | renderer | Everything the user sees. No file or process access |
 
@@ -34,6 +34,8 @@ The window is created with:
 - A Content Security Policy in `ui/index.html`:
   `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'`.
   Only the app's own scripts run (no inline scripts, no remote code). Images may come from the app or from `data:` URLs, because game images are sent to the page as data URLs.
+
+The window also cannot be navigated away or open new windows (`setWindowOpenHandler` and `will-navigate` block both). `open_external` accepts only the keywords `data`, `logs` and `repo`, never a path or a URL, so the page cannot use it to open arbitrary files or links.
 
 The page cannot read or write arbitrary files. File paths for games and images come from the native open-file dialog (`pick_file`), and the main process validates every path again before using it (existence, extension, size).
 
@@ -65,6 +67,16 @@ The preload script exposes `window.api` with four members:
 | `toggle_favorite` | `{ id }` | The updated game view |
 | `remove_game` | `{ id }` | nothing |
 | `win_state` | none | `true` if the window is maximized |
+| `get_settings` | none | The settings object |
+| `save_settings` | `{ patch }` | The settings after the change |
+| `reset_settings` | none | The default settings |
+| `set_wallpaper` | `{ path }` | The settings, with the user's own app background |
+| `clear_wallpaper` | none | The settings, with the own background removed |
+| `get_wallpaper` | none | The own background as a data URL, or `null` |
+| `get_app_info` | none | Version, data folder, Electron/Chromium/Node versions, license, `packaged` |
+| `open_external` | `{ target }` | nothing; `target` is the keyword `data`, `logs` or `repo` |
+
+The settings commands are described in [Settings](settings.md).
 
 ### Errors
 
@@ -82,5 +94,6 @@ Every handler in `main.js` is wrapped by `handle()`, which never lets an excepti
 1. Take the single-instance lock (otherwise quit).
 2. Resolve the data folder `%USERPROFILE%\manypon\manygamelib` and create `icons`.
 3. Migrate an older library if needed, then load the library. If the file cannot be read, ask "Retry / Exit" in a loop (see [Storage](storage.md)).
-4. Register the IPC handlers and create the window.
-5. If the library was restored from a backup, show a notice once the window is visible.
+4. Load the settings (never blocks startup, see [Settings](settings.md)), write the first log line if logging is on, and make Windows autostart match the setting.
+5. Register the IPC handlers and create the window.
+6. If the library was restored from a backup, show a notice once the window is visible.

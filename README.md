@@ -37,6 +37,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu.
+- **Settings page:** an app background (a bundled picture, your own or none) with blur and dimming sliders, an option to turn off the top block card, autostart with Windows, an optional log file, and a custom Java path for `.jar` files.
 - Supported files: `.exe`, `.jar` (runs through Java, which must be installed; the app looks for `javaw` in PATH, `JAVA_HOME`, the Windows registry and the usual Program Files folders), `.lnk` and `.url` shortcuts, plus `.bat`, `.cmd` and `.msi`. Any other file opens with the program Windows has assigned to it.
 - Games start in their own folder. If a game needs administrator rights, Windows shows the UAC prompt.
 - "Remove from library" deletes only the library entry. Your game files are never touched.
@@ -48,6 +49,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 
 - `games.json`: the list of games
 - `icons\`: copies of the icons you picked (they survive even if the original files are deleted)
+- `settings.json`: your settings (the app background copy is in `icons\`); `logs\`: the log, only if you turn it on
 - `games.json.bak`: the previous version of the list, updated on every save
 - `backups\`: one copy of the list per app start, the last 5 are kept
 - If `games.json` is corrupted, it is renamed to `games.corrupt-<date>.json` (never overwritten) and the last good copy is restored automatically, with a notice.
@@ -69,7 +71,7 @@ For the top block: a banner around 1920×620, and a logo as a PNG with a transpa
 manygamelib/
 ├─ main.js        game storage, process launching, file dialogs
 ├─ preload.js     safe bridge between the UI and main.js
-├─ ui/            interface (index.html, style.css, app.js)
+├─ ui/            interface (index.html, style.css, app.js, assets/)
 ├─ build/         app icons
 ├─ docs/          technical documentation
 ├─ start.bat      double-click launcher
@@ -78,7 +80,7 @@ manygamelib/
 
 ## Documentation
 
-How the app works inside (architecture, storage and backups, images, launching, interface, build and release): [docs/](docs/README.md). Every page is in English and Russian.
+How the app works inside (architecture, storage and backups, settings, images, launching, interface, build and release): [docs/](docs/README.md). Every page is in English and Russian.
 
 ## License
 

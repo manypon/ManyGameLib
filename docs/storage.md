@@ -14,11 +14,20 @@ manygamelib/
 ├─ games.json.bak                   previous version, refreshed on every save
 ├─ games.json.tmp                   temporary file during a save (normally absent)
 ├─ games.corrupt-<date>.json        a corrupted file, kept aside (only after a problem)
+├─ settings.json                    app settings (created on the first save)
+├─ settings.json.bak                previous version of the settings
+├─ settings.corrupt-<date>.json     a corrupted settings file, kept aside (only after a problem)
+├─ logs/
+│  ├─ manygamelib.log               the log (only when logging is on)
+│  └─ manygamelib.log.old           the previous log after rotation at 1 MB
 ├─ backups/
 │  └─ games-<date>_<time>.json      one copy per app start, last 5 kept
 └─ icons/
-   └─ <id>-<kind>-<random>.<ext>    copies of icons, banners and logos
+   ├─ <id>-<kind>-<random>.<ext>    copies of icons, banners and logos
+   └─ app-wallpaper-<random>.<ext>  the user's own app background (if chosen)
 ```
+
+Settings, the app background and the log are described in [Settings](settings.md). They are stored separately from the library, and a damaged `settings.json` never affects `games.json`.
 
 Timestamps in file names are UTC.
 
@@ -102,4 +111,4 @@ So `D:\Games\a.exe`, `d:/games/A.EXE` and a shortcut to it count as the same gam
 
 ## Moving the library
 
-Copy the whole `manygamelib` folder. Game paths are absolute, so the games must be at the same paths on the other computer. A game whose file is missing is still listed and shows a "File not found" badge.
+Copy the whole `manygamelib` folder (it carries the settings and the own wallpaper too). Game paths are absolute, so the games must be at the same paths on the other computer. A game whose file is missing is still listed and shows a "File not found" badge.

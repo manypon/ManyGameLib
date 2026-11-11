@@ -27,6 +27,7 @@ Processes are started **detached** with ignored stdio and `unref()`, so a game k
 
 The app looks for `javaw.exe` in this order and uses the first one that exists:
 
+0. The path set in Settings (`javaPath`, see [Settings](settings.md)). If it is set, **only** this file is used: a wrong path is an explicit error ("Java file from settings not found"), never a silent switch to another Java.
 1. Every folder in `PATH`.
 2. `JAVA_HOME\bin` and `JRE_HOME\bin`.
 3. The Windows registry:
@@ -52,6 +53,10 @@ The lock lives in memory only; restarting the app resets it.
 ## Missing files
 
 `view()` marks a game `missing` when its file does not exist. Tiles show a "File not found" badge. The UI re-checks cheaply (`get_missing` returns just the ids) each time the window regains focus, so plugging in a drive or restoring a file clears the badge without a restart.
+
+## Log
+
+When logging is enabled in Settings, every launch, the chosen Java and every launch error are written to `logs\manygamelib.log` (see [Settings](settings.md)).
 
 ## Limits
 

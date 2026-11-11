@@ -67,6 +67,8 @@ This keeps the main list small even with large banners.
 
 `normalizeHero()` runs on every save and read, so invalid or missing values become `blur`, `true`, `cover`. If `bg` is `banner` but there is no banner image, the form refuses to save and asks for a picture or another background.
 
+The app background (the picture behind the whole interface) is separate from game images: it is a bundled picture or the user's own copy `icons\app-wallpaper-<random>.<ext>`, see [Settings](settings.md). The top-block background described here can be switched off in Settings (`heroBackground`); the game's saved `hero` values stay untouched.
+
 Without an icon, a game gets a colored tile with its first letter. The hue is derived from the name, so it stays the same between runs.
 
 ## Form behavior
