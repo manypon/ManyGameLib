@@ -23,6 +23,14 @@ function cmpVersion(a, b) {
   return 0;
 }
 
+/* Сообщение об ошибке для интерфейса: electron-updater кладёт в него заголовки и стек, показывать их незачем. */
+function shortError(e) {
+  let m = String((e && e.message) || e || 'Неизвестная ошибка');
+  if (/latest\.yml/.test(m) && /404/.test(m)) return 'В последнем релизе на GitHub нет файла latest.yml.';
+  m = m.split('\n')[0].replace(/\s+/g, ' ').trim();
+  return m.length > 200 ? `${m.slice(0, 197)}…` : m;
+}
+
 function createUpdater({ app, net, repoUrl, log, send }) {
   const m = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(repoUrl);
   const slug = m ? `${m[1]}/${m[2]}` : null;
@@ -54,7 +62,7 @@ function createUpdater({ app, net, repoUrl, log, send }) {
     au.on('update-not-available', () => set({ status: 'none', version: null, error: null }));
     au.on('download-progress', (p) => set({ status: 'downloading', progress: Math.round(p.percent || 0) }));
     au.on('update-downloaded', (i) => { log('info', `обновление: v${i.version} скачана`); set({ status: 'ready', version: i.version, progress: 100 }); });
-    au.on('error', (e) => { log('error', `обновление: ${e && e.message}`); set({ status: 'error', error: (e && e.message) || 'Неизвестная ошибка' }); });
+    au.on('error', (e) => { log('error', `обновление: ${e && e.message}`); set({ status: 'error', error: shortError(e) }); });
     return au;
   }
 
@@ -83,7 +91,7 @@ function createUpdater({ app, net, repoUrl, log, send }) {
       else await checkGithub();
       if (state.status === 'checking') set({ status: 'none' });
     } catch (e) {
-      const msg = e && e.name === 'TimeoutError' ? 'GitHub не ответил вовремя.' : (e && e.message) || String(e);
+      const msg = e && e.name === 'TimeoutError' ? 'GitHub не ответил вовремя.' : shortError(e);
       log('error', `обновление: проверка не удалась: ${msg}`);
       set({ status: 'error', error: msg });
     }
@@ -96,7 +104,7 @@ function createUpdater({ app, net, repoUrl, log, send }) {
     set({ status: 'downloading', progress: 0, error: null });
     getAu().downloadUpdate().catch((e) => {
       log('error', `обновление: скачивание не удалось: ${e && e.message}`);
-      set({ status: 'error', error: (e && e.message) || 'Не удалось скачать обновление.' });
+      set({ status: 'error', error: shortError(e) });
     });
     return { ...state };
   }
@@ -111,4 +119,4 @@ function createUpdater({ app, net, repoUrl, log, send }) {
   return { check, download, install, getState: () => ({ ...state }), installed };
 }
 
-module.exports = { createUpdater, cmpVersion };
+module.exports = { createUpdater, cmpVersion, shortError };
