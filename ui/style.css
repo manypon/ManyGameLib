@@ -477,9 +477,18 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .has-bg .sidebar { background: rgba(10, 10, 15, 0.62); backdrop-filter: blur(16px); }
 .has-bg .s-card { background: rgba(20, 20, 28, 0.62); backdrop-filter: blur(14px); }
 .has-bg .section-head h2, .has-bg .card-name, .has-bg .settings-sub { text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7); }
-/* Нижний край верхнего блока растворяется в фоне, а не в сплошном цвете. */
-.has-bg .hero-bg { -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%); mask-image: linear-gradient(to bottom, #000 58%, transparent 100%); }
-.has-bg .hero-bg::after { background: linear-gradient(to right, rgba(13, 13, 18, 0.7), rgba(13, 13, 18, 0) 65%); }
+/* С фоном верхний блок становится отдельной карточкой с чётким краем: картинка игры
+   и фон приложения не смешиваются. Без фона блок остаётся на всю ширину, как раньше. */
+.has-bg .content > .hero {
+  margin: 76px 40px 0; height: 380px; padding: 0 36px 40px;
+  border-radius: 22px; border: 1px solid var(--border-strong);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.has-bg .content > .hero .hero-bg::after {
+  background:
+    linear-gradient(to top, rgba(13, 13, 18, 0.7), rgba(13, 13, 18, 0) 70%),
+    linear-gradient(to right, rgba(13, 13, 18, 0.7), rgba(13, 13, 18, 0) 65%);
+}
 
 .s-buttons { display: flex; gap: 8px; }
 .s-slider { display: flex; align-items: center; gap: 14px; }
