@@ -38,6 +38,22 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Ensure latest.yml exists
+      shell: pwsh
+      run: |
+        # Safety net: the app updater needs latest.yml, normally electron-builder writes it.
+        if (-not (Test-Path dist/latest.yml)) {
+          $exe = Get-ChildItem dist -Filter 'ManyGameLib-Setup-*.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'Installer not found in dist' }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $sha512 = [Convert]::ToBase64String([Convert]::FromHexString((Get-FileHash $exe.FullName -Algorithm SHA512).Hash))
+          $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")
+          $yml = "version: $version`nfiles:`n  - url: $($exe.Name)`n    sha512: $sha512`n    size: $($exe.Length)`npath: $($exe.Name)`nsha512: $sha512`nreleaseDate: '$date'`n"
+          [IO.File]::WriteAllText((Join-Path (Get-Location) 'dist/latest.yml'), $yml)
+          Write-Host "Generated latest.yml"
+        }
+        Get-Content dist/latest.yml
+
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
@@ -59,6 +75,8 @@ jobs:
         files: |
           ManyGameLib-Build.zip
           dist/ManyGameLib-Setup-*.exe
+          dist/ManyGameLib-Setup-*.exe.blockmap
+          dist/latest.yml
         tag_name: ${{ github.ref_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
