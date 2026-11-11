@@ -25,7 +25,7 @@ const state = {
   sort: 'name',         // name | added | played
   layout: 'grid',       // grid | list
   selectedId: null,
-  settingsTab: 'appearance', // вкладка страницы настроек: appearance | library | about
+  settingsTab: 'general', // вкладка страницы настроек: general | appearance | library | about
   appInfo: null,        // сведения о приложении для вкладки «О приложении»
   settings: null,       // настройки приложения (get_settings)
   wallpaper: null,      // data URL своей картинки фона (грузится, только если она выбрана)
@@ -67,6 +67,7 @@ const ICON = {
   close: svg('<path d="m5 5 14 14M19 5 5 19"/>'),
   grid: svg('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
   list: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+  gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"/>'),
   folder: svg('<path d="M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/>'),
   image: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/>'),
 };
@@ -479,6 +480,7 @@ function renderSearch() {
 /* ---------- Страница настроек ---------- */
 
 const SETTINGS_TABS = [
+  { id: 'general', label: 'Общие', icon: 'gear' },
   { id: 'appearance', label: 'Внешний вид', icon: 'image' },
   { id: 'library', label: 'Библиотека', icon: 'folder' },
   { id: 'about', label: 'О приложении', icon: 'info' },
@@ -584,10 +586,11 @@ async function clearWallpaper() {
 }
 
 /* Переключатель «вкл / выкл». */
-function toggle(value, onChange) {
+function toggle(value, onChange, disabled = false) {
   const input = h('input', { type: 'checkbox', onChange: (e) => onChange(e.target.checked) });
   input.checked = !!value;
-  return h('label', { class: 'switch' }, input, h('span', { class: 'switch-knob' }));
+  input.disabled = disabled;
+  return h('label', { class: 'switch' + (disabled ? ' is-disabled' : '') }, input, h('span', { class: 'switch-knob' }));
 }
 
 /* Ползунок: во время движения меняем фон сразу, сохраняем, когда отпустили. */
@@ -642,6 +645,69 @@ function appearancePanel() {
   return [settingsCard('Фон приложения', 'Картинка за всем интерфейсом', rows), heroCard];
 }
 
+async function pickJava() {
+  try {
+    const picked = await dialog.open({
+      title: 'Укажите javaw.exe',
+      filters: [{ name: 'Java', extensions: ['exe'] }, { name: 'Все файлы', extensions: ['*'] }],
+    });
+    if (!picked) return;
+    state.settings.javaPath = picked;
+    await saveSettingsPatch({ javaPath: picked });
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+  render();
+}
+
+async function clearJava() {
+  state.settings.javaPath = '';
+  await saveSettingsPatch({ javaPath: '' });
+  render();
+}
+
+async function resetSettings() {
+  const ok = await confirmModal({
+    title: 'Сбросить настройки?',
+    text: 'Фон, переключатели и путь к Java вернутся к значениям по умолчанию. Игры и библиотека не затрагиваются.',
+    okLabel: 'Сбросить',
+  });
+  if (!ok) return;
+  try {
+    state.settings = await invoke('reset_settings');
+    state.wallpaper = null;
+    toast('Настройки сброшены');
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+  applyBackground();
+  render();
+}
+
+function generalPanel() {
+  ensureAppInfo();
+  const st = state.settings;
+  if (!st) return settingsCard('Общие настройки', 'Загрузка…');
+  const packaged = !state.appInfo || state.appInfo.packaged;
+  const rows = [
+    settingRow('Запускать при старте системы',
+      packaged ? 'ManyGameLib откроется сам после входа в Windows' : 'Работает только в собранном приложении, не при запуске через npm start',
+      toggle(st.autostart && packaged, (on) => { st.autostart = on; saveSettingsPatch({ autostart: on }); }, !packaged)),
+    settingRow('Вести журнал', 'Запуски игр и ошибки записываются в файл logs\\manygamelib.log',
+      toggle(st.logging, (on) => { st.logging = on; render(); saveSettingsPatch({ logging: on }); })),
+  ];
+  if (st.logging) {
+    rows.push(settingRow('Папка журнала', 'Когда файл вырастает до 1 МБ, он становится manygamelib.log.old, а запись идёт в новый',
+      h('button', { class: 'btn ghost small', type: 'button', onClick: () => openTarget('logs') }, icon('folder'), 'Открыть папку')));
+  }
+  return [
+    settingsCard('Общие настройки', 'Основные параметры приложения', rows),
+    settingsCard('Сброс', 'Вернуть настройки по умолчанию',
+      settingRow('Сбросить настройки', 'Игры и библиотека не затрагиваются',
+        h('button', { class: 'btn danger small', type: 'button', onClick: resetSettings }, 'Сбросить'))),
+  ];
+}
+
 function libraryPanel() {
   ensureAppInfo();
   const total = state.games.length;
@@ -654,6 +720,14 @@ function libraryPanel() {
         h('span', { class: missing ? 's-bad' : '' }, `${missing}`)),
       settingRow('Папка данных', h('span', { class: 's-path', title: dir }, dir),
         h('button', { class: 'btn ghost small', type: 'button', onClick: () => openTarget('data') }, icon('folder'), 'Открыть папку'))),
+    settingsCard('Запуск игр', 'Для файлов .jar',
+      settingRow('Путь к Java',
+        state.settings && state.settings.javaPath
+          ? h('span', { class: 's-path', title: state.settings.javaPath }, state.settings.javaPath)
+          : 'Не задан: Java ищется автоматически (PATH, JAVA_HOME, реестр, Program Files)',
+        h('div', { class: 's-buttons' },
+          h('button', { class: 'btn ghost small', type: 'button', onClick: pickJava }, 'Выбрать…'),
+          state.settings && state.settings.javaPath && h('button', { class: 'btn ghost small', type: 'button', onClick: clearJava }, 'Сбросить')))),
     settingsCard('Защита данных', 'Список игр хранится безопасно',
       settingRow('Предыдущая версия списка', 'Файл games.json.bak, обновляется при каждом сохранении', null),
       settingRow('Копии за запуски', 'Папка backups: по одной копии за запуск, последние 5', null),
@@ -684,7 +758,8 @@ function renderSettings() {
     }, icon(t.icon), t.label)));
   const panel = h('div', { class: 'settings-panel' },
     state.settingsTab === 'about' ? aboutPanel()
-      : state.settingsTab === 'library' ? libraryPanel() : appearancePanel());
+      : state.settingsTab === 'library' ? libraryPanel()
+      : state.settingsTab === 'appearance' ? appearancePanel() : generalPanel());
   return h('section', { class: 'section settings', style: 'margin-top:0' },
     h('div', { class: 'section-head' },
       h('div', {}, h('h2', {}, 'Настройки'), h('p', { class: 'settings-sub' }, 'Настройте приложение под себя'))),

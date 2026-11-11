@@ -281,6 +281,42 @@ function mergeSettings(patch) {
   });
 }
 
+/* ---------- Журнал и автозапуск ---------- */
+
+const LOG_MAX_BYTES = 1024 * 1024; // дальше файл переименовывается в .old (хранится один)
+let logsDir;
+
+/* Пишет строку в logs\manygamelib.log. Ошибки записи молча игнорируются: журнал не должен ломать приложение. */
+function writeLog(level, msg) {
+  if (!logsDir) return;
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+    const file = path.join(logsDir, 'manygamelib.log');
+    try { if (fs.statSync(file).size > LOG_MAX_BYTES) fs.renameSync(file, file + '.old'); } catch { /* файла ещё нет */ }
+    fs.appendFileSync(file, `${new Date().toISOString()} [${level}] ${msg}\n`);
+  } catch { /* ignore */ }
+}
+
+/* Обычная запись: только если журнал включён в настройках. */
+function logLine(level, msg) {
+  if (settings.logging) writeLog(level, msg);
+}
+
+/* Автозапуск прописываем только в собранном приложении: в режиме разработки
+   в автозапуск попал бы electron.exe, а не ManyGameLib. */
+function applyAutostart(enabled) {
+  if (!app.isPackaged) return;
+  try { app.setLoginItemSettings({ openAtLogin: !!enabled }); }
+  catch (e) { logLine('error', `автозапуск: ${e.message}`); }
+}
+
+/* Побочные эффекты после изменения настроек. */
+function afterSettingsChange(prev, next) {
+  if (next.autostart !== prev.autostart) applyAutostart(next.autostart);
+  if (prev.logging && !next.logging) writeLog('info', 'журнал выключен');
+  if (!prev.logging && next.logging) writeLog('info', 'журнал включён');
+}
+
 const extOf = (p) => path.extname(String(p || '')).slice(1).toLowerCase();
 const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const hasImage = (name) => !!name && isFile(path.join(iconsDir, name));
@@ -470,6 +506,12 @@ function cmpJavaVersion(a, b) {
 async function findJavaw() {
   const found = (p) => (p && isFile(p) ? p : null);
 
+  // 0. Путь, указанный в настройках: если он задан, ищем только его (неверный путь это ошибка, а не повод искать другую Java)
+  if (settings.javaPath) {
+    if (isFile(settings.javaPath)) return settings.javaPath;
+    throw new Error(`Файл Java из настроек не найден: ${settings.javaPath}`);
+  }
+
   // 1. PATH
   for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
     const hit = dir && found(path.join(dir.replace(/^"|"$/g, ''), JAVAW));
@@ -527,6 +569,7 @@ async function spawnGame(file) {
     if (!javaw) {
       throw new Error('Java не найдена. Установите Java (JRE 8 или новее) или задайте переменную JAVA_HOME, затем повторите.');
     }
+    logLine('info', `Java: ${javaw}`);
     try { await spawnProcess(javaw, ['-jar', file], cwd); }
     catch (e) { throw new Error(`Не удалось запустить Java (${javaw}): ${e.message}`); }
     return;
@@ -551,7 +594,9 @@ function handle(channel, fn) {
     try {
       return { data: await fn(args || {}) };
     } catch (e) {
-      return { error: e && e.message ? e.message : String(e) };
+      const message = e && e.message ? e.message : String(e);
+      logLine('error', `${channel}: ${message}`);
+      return { error: message };
     }
   });
 }
@@ -568,13 +613,18 @@ function registerHandlers() {
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     node: process.versions.node,
+    packaged: app.isPackaged,
   }));
 
-  /* Открывает папку данных или страницу проекта. Интерфейс передаёт только название цели,
+  /* Открывает папку данных, папку журнала или страницу проекта. Интерфейс передаёт только название цели,
      а не адрес или путь: произвольные ссылки и файлы отсюда открыть нельзя. */
   handle('open_external', async ({ target }) => {
     if (target === 'data') {
       const err = await shell.openPath(dataDir);
+      if (err) throw new Error(`Не удалось открыть папку: ${err}`);
+    } else if (target === 'logs') {
+      fs.mkdirSync(logsDir, { recursive: true });
+      const err = await shell.openPath(logsDir);
       if (err) throw new Error(`Не удалось открыть папку: ${err}`);
     } else if (target === 'repo') {
       await shell.openExternal(REPO_URL);
@@ -611,15 +661,19 @@ function registerHandlers() {
   handle('get_settings', () => settings);
 
   handle('save_settings', ({ patch }) => {
+    const prev = settings;
     saveSettings(mergeSettings(patch));
+    afterSettingsChange(prev, settings);
     return settings;
   });
 
   /* Возвращает настройки по умолчанию. Файл своего фона, если он был, удаляем. */
   handle('reset_settings', () => {
-    const oldFile = settings.background.file;
+    const prev = settings;
     saveSettings(normalizeSettings({}));
-    removeImage(oldFile);
+    removeImage(prev.background.file);
+    afterSettingsChange(prev, settings);
+    logLine('info', 'настройки сброшены');
     return settings;
   });
 
@@ -696,6 +750,7 @@ function registerHandlers() {
     }
     g.last_played = Date.now();
     saveGames();
+    logLine('info', `запуск: ${g.name} (${g.exe_path})`);
     return view(g);
   });
 
@@ -784,6 +839,7 @@ if (!app.requestSingleInstanceLock()) {
     dbPath = path.join(dataDir, 'games.json');
     backupsDir = path.join(dataDir, 'backups');
     settingsPath = path.join(dataDir, 'settings.json');
+    logsDir = path.join(dataDir, 'logs');
     // Не читается (занят, нет доступа)? Предлагаем повторить, с пустой библиотекой не стартуем.
     for (;;) {
       try {
@@ -806,6 +862,12 @@ if (!app.requestSingleInstanceLock()) {
       }
     }
     loadSettings();
+    logLine('info', `запуск приложения v${app.getVersion()}, Electron ${process.versions.electron}, ${process.platform}`);
+    if (libraryNotice) logLine('warn', libraryNotice.replace(/\n/g, ' '));
+    // Приводим автозапуск в соответствие с настройкой (если его убрали или добавили снаружи).
+    try {
+      if (app.isPackaged && app.getLoginItemSettings().openAtLogin !== settings.autostart) applyAutostart(settings.autostart);
+    } catch { /* ignore */ }
     registerHandlers();
     createWindow();
     if (libraryNotice) {
