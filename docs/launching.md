@@ -17,9 +17,19 @@ Launching is handled entirely by the main process (`spawnGame()` in `main.js`). 
 
 | Extension | Method |
 |-----------|--------|
-| `.exe`, `.com` | `spawn` the file directly, with the game's own folder as the working directory. If that fails (for example, Windows requires elevation), fall back to the shell (`shell.openPath`), which shows the UAC prompt |
-| `.jar` | Find `javaw.exe` (see below) and run `javaw -jar <file>` in the file's folder |
+| `.exe`, `.com` | `spawn` the file directly with the game's launch arguments, with the game's own folder as the working directory. If that fails (for example, Windows requires elevation) and there are no arguments, fall back to the shell (`shell.openPath`), which shows the UAC prompt |
+| `.jar` | Find `javaw.exe` (see below) and run `javaw -jar <file> <arguments>` in the file's folder |
 | everything else (`.lnk`, `.url`, `.bat`, `.cmd`, `.msi`, other files) | `shell.openPath`: the program Windows has assigned to the file type |
+
+## Launch arguments
+
+A game can have launch arguments (`args`), for example `-windowed -nolauncher`. They are used for `.exe`, `.com` and `.jar` only; the field is hidden in the form for other types, and ignored for them if a value is stored.
+
+- The string is split into words by spaces; text in double quotes stays one word (`-path "C:\My Games"` gives `-path` and `C:\My Games`). An unclosed quote takes the rest of the line (`parseArgs`).
+- The words are passed to the process as a list, never through a command shell. Characters like `&` or `|` are ordinary text, so an argument cannot run another command.
+- For `.jar` the arguments follow `-jar <file>`. JVM options (such as `-Xmx4G`) are not supported: they would have to come before `-jar`.
+- If the direct start fails and the game has arguments, the shell fallback is **not** used (it cannot pass arguments), and the error says to start the game without arguments or manually. This matters for games that require administrator rights.
+- The log records `[with arguments]` but never their content, because arguments may contain tokens.
 
 Processes are started **detached** with ignored stdio and `unref()`, so a game keeps running if ManyGameLib is closed, and its output never blocks the launcher. The working directory is the game's folder, because many games load files by relative paths.
 

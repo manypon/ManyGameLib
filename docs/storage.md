@@ -40,6 +40,7 @@ A JSON array of game objects:
   "id": "1731234567890",
   "name": "Hollow Knight",
   "exe_path": "D:\\Games\\HK\\hollow_knight.exe",
+  "args": "-windowed",
   "icon_file": "1731234567890-icon-m3k2x9.png",
   "banner_file": null,
   "logo_file": null,
@@ -55,6 +56,7 @@ A JSON array of game objects:
 - `*_file` fields hold only a file name inside `icons/`, never a path, so the folder can be moved to another computer.
 - `hero` is normalized on every read: unknown values fall back to `blur`, `true` and `cover` (see [Images](images.md)).
 - `exe_path` is an absolute path as chosen by the user.
+- `args` is the launch arguments as one string (empty by default; older games may not have the field). Line breaks and control characters are removed, at most 1000 characters.
 - Times are Unix milliseconds.
 
 ## Writing safely

@@ -70,7 +70,7 @@ Every launch button carries `data-launch-id`. `refreshLaunchButtons()` runs afte
 
 - **Modal windows** (add, edit, about, confirm) share one container. Escape or a click on the backdrop closes it, but if a form has unsaved input (`tryDismiss`), the window stays open and a hint is shown; the × button always closes it.
 - **Context menu** (right-click or the "⋯" button): launch, favorite, details, edit, remove from library. Clicking the same "⋯" button again closes it.
-- **Add/edit form** (`gameForm`) keeps its own local state: the chosen file, the name (auto-filled from the file name until the user types their own), the three images and the top-block settings. On submit it sends one `add_game` or `update_game` request. Errors come back as text and are shown inside the form.
+- **Add/edit form** (`gameForm`) keeps its own local state: the chosen file, the name (auto-filled from the file name until the user types their own), the launch arguments (the field is hidden for file types that do not use them), the three images and the top-block settings. On submit it sends one `add_game` or `update_game` request. Errors come back as text and are shown inside the form.
 - **Toasts** show short results and errors.
 - **Deleting a game** asks for confirmation, and removes only the library entry.
 

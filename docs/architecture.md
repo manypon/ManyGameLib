@@ -63,8 +63,8 @@ The preload script exposes `window.api` with five members:
 | `get_missing` | none | Ids of games whose file no longer exists |
 | `get_assets` | `{ id }` | `{ icon, banner, logo }` as data URLs (or `null`) |
 | `preview_image` | `{ path }` | Data URL for a picked file, before saving |
-| `add_game` | `{ name, exePath, images, hero }` | The new game view |
-| `update_game` | `{ id, name, exePath, images, hero }` | The updated game view |
+| `add_game` | `{ name, exePath, args, images, hero }` | The new game view |
+| `update_game` | `{ id, name, exePath, args, images, hero }` | The updated game view |
 | `launch_game` | `{ id }` | The game view with the new `last_played` |
 | `toggle_favorite` | `{ id }` | The updated game view |
 | `remove_game` | `{ id }` | nothing |

@@ -356,6 +356,7 @@ function view(g) {
     id: g.id,
     name: g.name,
     exe_path: g.exe_path,
+    args: cleanArgs(g.args),
     icon: readImage(g.icon_file),
     has_banner: hasImage(g.banner_file),
     has_logo: hasImage(g.logo_file),
@@ -389,6 +390,34 @@ function cleanName(name) {
   name = String(name || '').trim();
   if (!name) throw new Error('Введите название игры.');
   return name.slice(0, 80);
+}
+
+/* Параметры запуска: одна строка, без переносов и управляющих символов, не длиннее 1000 знаков. */
+const MAX_ARGS_LEN = 1000;
+const ARGS_TYPES = ['exe', 'com', 'jar']; // для остальных типов параметры не передаются (см. spawnGame)
+
+function cleanArgs(args) {
+  return String(args == null ? '' : args).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, MAX_ARGS_LEN);
+}
+
+/* Строка параметров в список: слова через пробел, в двойных кавычках пробелы сохраняются.
+   Незакрытая кавычка захватывает остаток строки. Строка никогда не попадает в командную оболочку. */
+function parseArgs(str) {
+  const out = [];
+  let cur = '';
+  let inQuote = false;
+  let has = false;
+  for (const ch of String(str || '')) {
+    if (ch === '"') { inQuote = !inQuote; has = true; continue; }
+    if (!inQuote && /\s/.test(ch)) {
+      if (has) { out.push(cur); cur = ''; has = false; }
+      continue;
+    }
+    cur += ch;
+    has = true;
+  }
+  if (has) out.push(cur);
+  return out;
 }
 
 function checkExe(exePath, selfId) {
@@ -561,11 +590,13 @@ async function findJavaw() {
 
 /* Как запускаем разные типы файлов:
    - exe, com: напрямую в папке игры; если Windows отказывает (например, нужны
-     права администратора), через оболочку — она сама покажет окно UAC;
+     права администратора), через оболочку — она сама покажет окно UAC (без параметров);
    - jar: через найденный javaw (-jar), без обращения к программе, назначенной в Windows;
-   - всё остальное (lnk, bat, cmd, url, msi…): через оболочку Windows. */
-async function spawnGame(file) {
+   - всё остальное (lnk, bat, cmd, url, msi…): через оболочку Windows, без параметров.
+   Параметры игры (args) передаются только для exe, com и jar, и всегда списком, не строкой для оболочки. */
+async function spawnGame(file, argsLine = '') {
   const ext = extOf(file);
+  const argv = ARGS_TYPES.includes(ext) ? parseArgs(cleanArgs(argsLine)) : [];
   const cwd = path.dirname(file);
 
   if (ext === 'jar') {
@@ -574,15 +605,19 @@ async function spawnGame(file) {
       throw new Error('Java не найдена. Установите Java (JRE 8 или новее) или задайте переменную JAVA_HOME, затем повторите.');
     }
     logLine('info', `Java: ${javaw}`);
-    try { await spawnProcess(javaw, ['-jar', file], cwd); }
+    try { await spawnProcess(javaw, ['-jar', file, ...argv], cwd); }
     catch (e) { throw new Error(`Не удалось запустить Java (${javaw}): ${e.message}`); }
     return;
   }
 
   if (ext === 'exe' || ext === 'com') {
     try {
-      await spawnProcess(file, [], cwd);
+      await spawnProcess(file, argv, cwd);
     } catch (e) {
+      // Через оболочку (например, чтобы показать окно UAC) параметры передать нельзя.
+      if (argv.length) {
+        throw new Error(`${e.message}. Если игре нужны права администратора, запустите её без параметров или вручную.`);
+      }
       try { await openViaShell(file); } catch { throw e; }
     }
     return;
@@ -707,7 +742,7 @@ function registerHandlers() {
   /* Предпросмотр выбранного файла в форме (до сохранения). */
   handle('preview_image', ({ path: p }) => dataUrl(String(p || '')));
 
-  handle('add_game', ({ name, exePath, images, hero }) => {
+  handle('add_game', ({ name, exePath, args, images, hero }) => {
     name = cleanName(name);
     checkExe(exePath, null);
 
@@ -719,7 +754,7 @@ function registerHandlers() {
     // если исходные файлы удалят или переместят.
     const { fields, created } = applyImages(null, images, id);
     const game = {
-      id, name, exe_path: exePath, ...fields, hero: normalizeHero(hero),
+      id, name, exe_path: exePath, args: cleanArgs(args), ...fields, hero: normalizeHero(hero),
       favorite: false, last_played: null, added_at: Date.now(),
     };
     try {
@@ -731,13 +766,13 @@ function registerHandlers() {
     return view(game);
   });
 
-  handle('update_game', ({ id, name, exePath, images, hero }) => {
+  handle('update_game', ({ id, name, exePath, args, images, hero }) => {
     const old = findGame(id);
     name = cleanName(name);
     checkExe(exePath, id);
 
     const { fields, created, obsolete } = applyImages(old, images, id);
-    const next = { ...old, name, exe_path: exePath, ...fields, hero: normalizeHero(hero) };
+    const next = { ...old, name, exe_path: exePath, args: cleanArgs(args), ...fields, hero: normalizeHero(hero) };
     try {
       commit(games.map((g) => (g === old ? next : g)));
     } catch (e) {
@@ -755,14 +790,14 @@ function registerHandlers() {
     if (!isFile(g.exe_path)) throw new Error(`Файл игры не найден: ${g.exe_path}`);
     launchedAt.set(id, Date.now()); // ставим сразу, чтобы второй запрос не прошёл, пока идёт первый
     try {
-      await spawnGame(g.exe_path);
+      await spawnGame(g.exe_path, g.args);
     } catch (e) {
       launchedAt.delete(id); // не запустилась, можно пробовать снова
       throw new Error(`Не удалось запустить игру: ${e.message}`);
     }
     g.last_played = Date.now();
     saveGames();
-    logLine('info', `запуск: ${g.name} (${g.exe_path})`);
+    logLine('info', `запуск: ${g.name} (${g.exe_path})${cleanArgs(g.args) && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [с параметрами]' : ''}`);
     return view(g);
   });
 

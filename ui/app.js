@@ -1126,6 +1126,7 @@ function openDetails(id) {
       h('dl', { class: 'kv' },
         h('dt', {}, 'Файл игры'),
         h('dd', { class: 'mono' + (game.missing ? ' bad' : '') }, game.exe_path + (game.missing ? '  (не найден)' : '')),
+        ...(game.args ? [h('dt', {}, 'Параметры'), h('dd', { class: 'mono' }, game.args)] : []),
         h('dt', {}, 'Добавлена'),
         h('dd', {}, formatDate(game.added_at)),
         h('dt', {}, 'Избранное'),
@@ -1200,6 +1201,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
   const st = {
     name: game ? game.name : '',
     exe: game ? game.exe_path : '',
+    args: game ? game.args || '' : '',
     nameTouched: editing,
     hero: { ...DEFAULT_HERO, ...(game ? game.hero : {}) },
     // url — что показываем сейчас; mode и path — что сделать при сохранении:
@@ -1231,6 +1233,22 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
   });
   nameInput.value = st.name;
 
+  // Параметры запуска: поле видно только для файлов, которым main.js их передаёт (exe, com, jar).
+  const ARGS_TYPES = ['exe', 'com', 'jar'];
+  const argsInput = h('input', {
+    class: 'input', type: 'text', maxlength: '1000', spellcheck: 'false', placeholder: '-windowed -nolauncher',
+    onInput: (e) => { st.args = e.target.value; },
+  });
+  argsInput.value = st.args;
+  const argsField = field('Параметры запуска',
+    argsInput,
+    h('span', { class: 'hint' }, 'Необязательно. Через пробел, значения с пробелами в кавычках. Для .jar они идут после -jar.'));
+  function syncArgs() {
+    const ext = (st.exe.split('.').pop() || '').toLowerCase();
+    argsField.hidden = !ARGS_TYPES.includes(ext);
+  }
+  syncArgs();
+
   async function pickExe() {
     try {
       const picked = await dialog.open({
@@ -1243,6 +1261,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       if (!picked) return;
       st.exe = picked;
       exeInput.value = picked;
+      syncArgs();
       showError('');
       if (!st.nameTouched || !st.name.trim()) {
         const parts = picked.split(/[\\/]/).filter(Boolean);
@@ -1385,6 +1404,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     const payload = {
       name: st.name.trim(),
       exePath: st.exe,
+      args: argsField.hidden ? '' : st.args.trim(),
       hero: { ...st.hero },
       images: Object.fromEntries(Object.entries(st.img).map(([k, v]) => [k, { mode: v.mode, path: v.path }])),
     };
@@ -1410,6 +1430,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     h('label', { class: 'field' },
       h('span', { class: 'field-label' }, 'Название'),
       nameInput),
+    argsField,
     field('Иконка или обложка',
       h('div', { class: 'icon-row' },
         iconPick,

@@ -63,8 +63,8 @@ Preload-скрипт отдаёт `window.api` из пяти членов:
 | `get_missing` | нет | id игр, файлов которых больше нет |
 | `get_assets` | `{ id }` | `{ icon, banner, logo }` в виде data URL (или `null`) |
 | `preview_image` | `{ path }` | data URL выбранного файла до сохранения |
-| `add_game` | `{ name, exePath, images, hero }` | Представление новой игры |
-| `update_game` | `{ id, name, exePath, images, hero }` | Обновлённое представление игры |
+| `add_game` | `{ name, exePath, args, images, hero }` | Представление новой игры |
+| `update_game` | `{ id, name, exePath, args, images, hero }` | Обновлённое представление игры |
 | `launch_game` | `{ id }` | Представление игры с новым `last_played` |
 | `toggle_favorite` | `{ id }` | Обновлённое представление игры |
 | `remove_game` | `{ id }` | ничего |
