@@ -25,10 +25,15 @@ npm run build      # выполняет: electron-builder
 
 1. Закрывает запущенный `ManyGameLib.exe` (открытая копия блокирует собственный файл, и сборка падает с `EPERM ... unlink`).
 2. Выполняет `npm install` только если нет `node_modules`.
-3. Удаляет старую папку `dist\win-unpacked`.
+3. Удаляет старую папку `dist`.
 4. Запускает `npm run build` и открывает папку с результатом.
 
-Результат: `dist\win-unpacked\ManyGameLib.exe`. Папку `win-unpacked` целиком можно переносить или упаковывать в архив; для запуска Node.js не нужен.
+Результат:
+
+- `dist\ManyGameLib-Setup-<версия>.exe`: установщик.
+- `dist\win-unpacked\ManyGameLib.exe`: портативная папка. Её можно переносить или упаковывать в архив; для запуска Node.js не нужен.
+
+Скрипт сборки это `electron-builder --publish never`: публикацией занимается workflow, а не сам `npm run build`.
 
 ### Раздел `build` в `package.json`
 
@@ -38,9 +43,16 @@ npm run build      # выполняет: electron-builder
 | `files` | `main.js`, `preload.js`, `ui/**/*`, `build/**/*` | В пакет попадает только то, что нужно приложению |
 | `electronDist` | `node_modules/electron/dist` | Использовать Electron, уже установленный `npm install`, а не скачивать его заново во время сборки |
 | `directories.output` | `dist` | Папка результата сборки |
-| `win.target` | `dir` | Распакованная папка, без установщика |
+| `win.target` | `dir`, `nsis` | Распакованная папка (портативная версия) и установщик NSIS |
+| `nsis` | см. ниже | Поведение установщика |
 | `win.icon` | `build/icon.ico` | Значок приложения |
 | `win.signAndEditExecutable` | `false` | Пропускает шаг, который правит exe и требует дополнительных инструментов; цена — exe сохраняет стандартные метаданные Electron |
+
+### Установщик
+
+Настройки `nsis`: `oneClick: false` (папку можно выбрать), `perMachine: false` (установка для текущего пользователя, права администратора не нужны), ярлыки на рабочем столе и в меню «Пуск», `artifactName` `ManyGameLib-Setup-${version}.exe`. `deleteAppDataOnUninstall` равен `false`, а библиотека и так лежит в `%USERPROFILE%\manypon\manygamelib`, вне папки установки, поэтому обновление и удаление не трогают игры, картинки и настройки.
+
+Установщик не подписан кодом, поэтому Windows SmartScreen может предупредить при первом запуске («Подробнее», затем «Выполнить в любом случае»). Инструменты NSIS electron-builder скачивает при первой сборке, поэтому первой локальной сборке нужен доступ к GitHub.
 
 ### Если Electron не скачивается
 
@@ -64,8 +76,8 @@ npm run build      # выполняет: electron-builder
 2. Выполняет `npm install` с `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`. Зеркало обходит неудачные скачивания Electron с GitHub (ошибки 504, упомянутые выше).
 3. Выполняет `node node_modules/electron/install.js`, чтобы гарантированно получить бинарник Electron, ведь `electronDist` в `package.json` указывает на него.
 4. Выполняет `npm run build`.
-5. Загружает `dist/win-unpacked/` как артефакт workflow с именем `ManyGameLib-Windows`.
-6. Упаковывает содержимое `dist/win-unpacked/` в `ManyGameLib-Build.zip` и прикрепляет его к релизу для тега (`softprops/action-gh-release`, с правом `contents: write` и встроенным `GITHUB_TOKEN`).
+5. Загружает `dist/win-unpacked/` как артефакт workflow с именем `ManyGameLib-Windows`, а установщик как `ManyGameLib-Installer`.
+6. Упаковывает содержимое `dist/win-unpacked/` в `ManyGameLib-Build.zip` и прикрепляет его вместе с `ManyGameLib-Setup-<версия>.exe` к релизу для тега (`softprops/action-gh-release`, с правом `contents: write` и встроенным `GITHUB_TOKEN`).
 
 Что важно знать:
 
@@ -81,7 +93,7 @@ npm run build      # выполняет: electron-builder
 1. Убедитесь, что в `package.json` стоит новая версия (она меняется один раз, в первом коммите релиза).
 2. По возможности проверьте сборку локально через `build.bat`.
 3. Создайте и отправьте тег: `git tag v1.1.1`, затем `git push origin v1.1.1`.
-4. Дождитесь workflow `Build Electron App`: он создаст релиз с `ManyGameLib-Build.zip`.
+4. Дождитесь workflow `Build Electron App`: он создаст релиз с `ManyGameLib-Setup-<версия>.exe` и `ManyGameLib-Build.zip`.
 5. Отредактируйте описание релиза: что нового и как установить, на английском и русском.
 
 ## Структура проекта

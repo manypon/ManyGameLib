@@ -25,7 +25,7 @@ Double-click `build.bat`: it closes a running copy of the app, installs dependen
 npm run build
 ```
 
-Output: `dist\win-unpacked\ManyGameLib.exe`. The whole `win-unpacked` folder can be moved anywhere, and Node.js is not needed to run it.
+Output: the installer `dist\ManyGameLib-Setup-<version>.exe` and the portable folder `dist\win-unpacked\ManyGameLib.exe`. The whole `win-unpacked` folder can be moved anywhere, and Node.js is not needed to run it.
 
 If Electron fails to download (a 504 or other network error), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `package.json`, `ui` and `build` into `resources\app`.
 

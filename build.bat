@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title ManyGameLib build
 
 echo [1/4] Closing running ManyGameLib...
-taskkill /F /IM ManyGameLib.exe >/dev/null 2>&1
+taskkill /F /IM ManyGameLib.exe >nul 2>&1
 
 echo [2/4] Checking dependencies...
 if not exist node_modules (
@@ -13,9 +13,9 @@ if not exist node_modules (
 )
 
 echo [3/4] Removing old build...
-if exist dist\win-unpacked rmdir /s /q dist\win-unpacked
-if exist dist\win-unpacked (
-  echo Could not delete dist\win-unpacked. Close Explorer windows in that folder and try again.
+if exist dist rmdir /s /q dist
+if exist dist (
+  echo Could not delete dist. Close Explorer windows in that folder and try again.
   goto fail
 )
 
@@ -24,8 +24,10 @@ call npm run build
 if errorlevel 1 goto fail
 
 echo.
-echo Done: dist\win-unpacked\ManyGameLib.exe
-start "" explorer "dist\win-unpacked"
+echo Done:
+echo   dist\ManyGameLib-Setup-*.exe  (installer)
+echo   dist\win-unpacked\ManyGameLib.exe  (portable folder)
+start "" explorer "dist"
 pause
 exit /b 0
 

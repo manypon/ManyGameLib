@@ -1,6 +1,6 @@
 {
   "name": "manygamelib",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Local Game Lib",
   "author": "manypon",
   "license": "MIT",
@@ -9,7 +9,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder"
+    "build": "electron-builder --publish never"
   },
   "devDependencies": {
     "electron": "^45.2.3",
@@ -29,9 +29,22 @@
       "build/**/*"
     ],
     "win": {
-      "target": "dir",
+      "target": [
+        "dir",
+        "nsis"
+      ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ManyGameLib",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "ManyGameLib-Setup-${version}.exe"
     }
   }
 }

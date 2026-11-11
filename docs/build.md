@@ -25,10 +25,15 @@ or double-click `build.bat`. The script:
 
 1. Closes a running `ManyGameLib.exe` (an open copy locks its own file and the build fails with `EPERM ... unlink`).
 2. Runs `npm install` only if `node_modules` is missing.
-3. Deletes the old `dist\win-unpacked` folder.
+3. Deletes the old `dist` folder.
 4. Runs `npm run build` and opens the result folder.
 
-Output: `dist\win-unpacked\ManyGameLib.exe`. The whole `win-unpacked` folder can be moved or zipped; Node.js is not needed to run it.
+Output:
+
+- `dist\ManyGameLib-Setup-<version>.exe`: the installer.
+- `dist\win-unpacked\ManyGameLib.exe`: the portable folder. It can be moved or zipped; Node.js is not needed to run it.
+
+The build script is `electron-builder --publish never`: publishing is done by the workflow, never by `npm run build` itself.
 
 ### The `build` section of `package.json`
 
@@ -38,9 +43,16 @@ Output: `dist\win-unpacked\ManyGameLib.exe`. The whole `win-unpacked` folder can
 | `files` | `main.js`, `preload.js`, `ui/**/*`, `build/**/*` | Only what the app needs ends up in the package |
 | `electronDist` | `node_modules/electron/dist` | Reuse the Electron already installed by `npm install` instead of downloading it again at build time |
 | `directories.output` | `dist` | Build output folder |
-| `win.target` | `dir` | An unpacked folder, no installer |
+| `win.target` | `dir`, `nsis` | The unpacked folder (the portable version) and an NSIS installer |
+| `nsis` | see below | Installer behavior |
 | `win.icon` | `build/icon.ico` | App icon |
 | `win.signAndEditExecutable` | `false` | Skips the step that edits the exe and needs extra tooling; the trade-off is that the exe keeps Electron's default metadata |
+
+### The installer
+
+`nsis` settings: `oneClick: false` (the user can choose the folder), `perMachine: false` (installs for the current user, no administrator rights needed), desktop and Start menu shortcuts, and `artifactName` `ManyGameLib-Setup-${version}.exe`. `deleteAppDataOnUninstall` is `false`, and the library lives in `%USERPROFILE%\manypon\manygamelib` anyway, outside the install folder, so updating or uninstalling does not remove games, images or settings.
+
+The installer is not code-signed, so Windows SmartScreen may warn on the first run ("More info" then "Run anyway"). NSIS tools are downloaded by electron-builder on the first build, so the first local build needs network access to GitHub.
 
 ### If Electron does not download
 
@@ -64,8 +76,8 @@ Runs when a tag starting with `v` is pushed (for example `v1.1.1`), or manually 
 2. Runs `npm install` with `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`. The mirror avoids the failed Electron downloads from GitHub (the 504 errors mentioned above).
 3. Runs `node node_modules/electron/install.js` to make sure the Electron binary is really there, because `electronDist` in `package.json` points at it.
 4. Runs `npm run build`.
-5. Uploads `dist/win-unpacked/` as a workflow artifact named `ManyGameLib-Windows`.
-6. Zips the contents of `dist/win-unpacked/` into `ManyGameLib-Build.zip` and attaches it to the release for the tag (`softprops/action-gh-release`, with `contents: write` permission and the built-in `GITHUB_TOKEN`).
+5. Uploads `dist/win-unpacked/` as a workflow artifact named `ManyGameLib-Windows`, and the installer as `ManyGameLib-Installer`.
+6. Zips the contents of `dist/win-unpacked/` into `ManyGameLib-Build.zip` and attaches it, together with `ManyGameLib-Setup-<version>.exe`, to the release for the tag (`softprops/action-gh-release`, with `contents: write` permission and the built-in `GITHUB_TOKEN`).
 
 Things to know:
 
@@ -81,7 +93,7 @@ Runs every day at 00:00 UTC (and manually). An issue with no activity for 30 day
 1. Make sure `package.json` has the new version (it is changed once, in the first commit of the release).
 2. Test the build locally with `build.bat` if you can.
 3. Create and push a tag: `git tag v1.1.1` then `git push origin v1.1.1`.
-4. Wait for the `Build Electron App` workflow; it creates the release with `ManyGameLib-Build.zip`.
+4. Wait for the `Build Electron App` workflow; it creates the release with `ManyGameLib-Setup-<version>.exe` and `ManyGameLib-Build.zip`.
 5. Edit the release description: what is new and how to install, in English and Russian.
 
 ## Project layout

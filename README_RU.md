@@ -25,7 +25,7 @@ npm start
 npm run build
 ```
 
-Результат: `dist\win-unpacked\ManyGameLib.exe`. Папку `win-unpacked` можно переносить целиком, Node.js для её запуска не нужен.
+Результат: установщик `dist\ManyGameLib-Setup-<версия>.exe` и портативная папка `dist\win-unpacked\ManyGameLib.exe`. Папку `win-unpacked` можно переносить целиком, Node.js для её запуска не нужен.
 
 Если Electron не скачивается (ошибка 504 или сетевая), можно собрать вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а в `resources\app` положите `main.js`, `preload.js`, `package.json`, `ui` и `build`.
 
