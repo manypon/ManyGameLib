@@ -22,7 +22,7 @@ const state = {
   heroId: null,         // игра, которая сейчас показана в верхнем блоке
   view: 'library',      // library | favorites | recent | settings
   query: '',
-  sort: 'name',         // name | added | played
+  sort: 'name',         // name | added | played | playtime
   layout: 'grid',       // grid | list
   selectedId: null,
   settingsTab: 'general', // вкладка страницы настроек: general | appearance | library | about
@@ -86,6 +86,15 @@ function startOfDay(ts) {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
+}
+
+/* Время в игре в часах: 12,5 ч; до 100 ч с десятой долей, дальше целое число. */
+function formatHours(sec) {
+  const h = sec / 3600;
+  if (h >= 100) return `${Math.round(h)} ч`;
+  const v = Math.round(h * 10) / 10;
+  if (sec > 0 && v === 0) return 'меньше 0,1 ч';
+  return `${String(v).replace('.', ',')} ч`;
 }
 
 function formatLast(ts) {
@@ -260,11 +269,13 @@ async function removeGame(id) {
 
 const byName = (a, b) => a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' });
 const byPlayed = (a, b) => (b.last_played || 0) - (a.last_played || 0);
+const byPlaytime = (a, b) => (b.playtime_sec || 0) - (a.playtime_sec || 0);
 
 function sorted(list) {
   const copy = [...list];
   if (state.sort === 'added') copy.sort((a, b) => b.added_at - a.added_at);
   else if (state.sort === 'played') copy.sort((a, b) => byPlayed(a, b) || byName(a, b));
+  else if (state.sort === 'playtime') copy.sort((a, b) => byPlaytime(a, b) || byName(a, b));
   else copy.sort(byName);
   return copy;
 }
@@ -420,7 +431,8 @@ function heroNode(g, { preview = false, dots = null } = {}) {
     h('div', { class: 'hero-body' },
       h('div', { class: 'hero-eyebrow' }, icon('clock'), g.last_played ? 'Последний запуск' : 'В библиотеке'),
       title,
-      h('p', { class: 'hero-sub' }, g.last_played ? formatLast(g.last_played) : 'Ещё не запускалась'),
+      h('p', { class: 'hero-sub' },
+        (g.last_played ? formatLast(g.last_played) : 'Ещё не запускалась') + (g.playtime_sec > 0 ? ` · Наиграно ${formatHours(g.playtime_sec)}` : '')),
       h('p', { class: 'hero-path', title: g.exe_path }, g.exe_path),
       h('div', { class: 'hero-actions' },
         h('button', { class: 'btn primary', type: 'button', 'data-launch-id': preview ? null : g.id, onClick: go(() => launch(g.id)) },
@@ -449,7 +461,8 @@ function sortSelect() {
   const sel = h('select', { onChange: (e) => { state.sort = e.target.value; render(); } },
     h('option', { value: 'name' }, 'По названию'),
     h('option', { value: 'added' }, 'По дате добавления'),
-    h('option', { value: 'played' }, 'По последнему запуску'));
+    h('option', { value: 'played' }, 'По последнему запуску'),
+    h('option', { value: 'playtime' }, 'По времени в игре'));
   sel.value = state.sort;
   return h('div', { class: 'select' }, sel);
 }
@@ -1136,6 +1149,8 @@ function openDetails(id) {
         h('dt', {}, 'Файл игры'),
         h('dd', { class: 'mono' + (game.missing ? ' bad' : '') }, game.exe_path + (game.missing ? '  (не найден)' : '')),
         ...(game.args ? [h('dt', {}, 'Параметры'), h('dd', { class: 'mono' }, game.args)] : []),
+        h('dt', {}, 'Наиграно'),
+        h('dd', {}, game.playtime_sec > 0 ? formatHours(game.playtime_sec) : '—'),
         h('dt', {}, 'Добавлена'),
         h('dd', {}, formatDate(game.added_at)),
         h('dt', {}, 'Избранное'),
@@ -1211,6 +1226,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     name: game ? game.name : '',
     exe: game ? game.exe_path : '',
     args: game ? game.args || '' : '',
+    playtime: game && game.playtime_sec > 0 ? String(Math.round(game.playtime_sec / 36) / 100).replace('.', ',') : '',   // часы, до сотых
+    playtimeTouched: false,
     nameTouched: editing,
     iconTouched: false,   // пользователь сам выбирал или убирал иконку: автоиконку из файла больше не подставляем
     hero: { ...DEFAULT_HERO, ...(game ? game.hero : {}) },
@@ -1242,6 +1259,16 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     onInput: (e) => { st.name = e.target.value; st.nameTouched = true; updatePreview(); },
   });
   nameInput.value = st.name;
+
+  // Время в игре, часы. Если пользователь поле не трогал, время не отправляем: автоучёт не затирается округлением.
+  const playtimeInput = h('input', {
+    class: 'input', type: 'text', inputmode: 'decimal', maxlength: '9', placeholder: '0', autocomplete: 'off',
+    onInput: (e) => { st.playtime = e.target.value; st.playtimeTouched = true; },
+  });
+  playtimeInput.value = st.playtime;
+  const playtimeField = field('Наиграно, ч',
+    playtimeInput,
+    h('span', { class: 'hint' }, 'Считается само, пока запущенная игра работает (запуски короче минуты не в счёт). Здесь можно задать своё значение, например 12,5.'));
 
   // Параметры запуска: поле видно только для файлов, которым main.js их передаёт (exe, com, jar).
   const ARGS_TYPES = ['exe', 'com', 'jar'];
@@ -1455,10 +1482,22 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       return showError('Выберите картинку для баннера или другой фон верхнего блока.');
     }
 
+    let playtimeSec;
+    if (st.playtimeTouched) {
+      const text = st.playtime.trim().replace(',', '.');
+      const hours = text === '' ? 0 : Number(text);
+      if (!Number.isFinite(hours) || hours < 0 || hours > 100000) {
+        playtimeInput.focus();
+        return showError('Наиграно: введите число часов, например 12,5.');
+      }
+      playtimeSec = Math.round(hours * 3600);
+    }
+
     const payload = {
       name: st.name.trim(),
       exePath: st.exe,
       args: argsField.hidden ? '' : st.args.trim(),
+      playtimeSec,
       hero: { ...st.hero },
       images: Object.fromEntries(Object.entries(st.img).map(([k, v]) => [k, { mode: v.mode, path: v.path }])),
     };
@@ -1485,6 +1524,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       h('span', { class: 'field-label' }, 'Название'),
       nameInput),
     argsField,
+    playtimeField,
     field('Иконка или обложка',
       h('div', { class: 'icon-row' },
         iconPick,
@@ -1505,7 +1545,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
 
   // Есть ли несохранённые данные (для защиты от случайного закрытия окна).
   const snap = () => JSON.stringify([
-    st.name.trim(), st.exe, st.hero,
+    st.name.trim(), st.exe, st.hero, st.playtime,
     Object.values(st.img).map((v) => [v.mode === 'exe' && !st.iconTouched ? 'keep' : v.mode, v.path]), // автоиконку не считаем правкой
   ]);
   let initial = snap();
@@ -1639,6 +1679,8 @@ $('#wMax').addEventListener('click', () => appWindow.toggleMaximize());
 $('#wClose').addEventListener('click', () => appWindow.close());
 
 window.api.onWinState(setMaximized);
+// Время в игре изменилось (игра закрылась): обновляем игру и перерисовываем экран.
+window.api.onGameUpdated((g) => { upsert(g); render(); });
 window.api.onUpdateState(onUpdateState);
 invoke('get_update_state').then((s) => { state.update = s; }).catch(() => {});
 invoke('win_state').then(setMaximized).catch(() => {});

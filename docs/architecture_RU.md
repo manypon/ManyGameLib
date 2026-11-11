@@ -42,7 +42,7 @@ ManyGameLib — небольшое приложение на Electron из тр�
 
 ## Контракт IPC
 
-Preload-скрипт отдаёт `window.api` из шести членов:
+Preload-скрипт отдаёт `window.api` из семи членов:
 
 | Член | Направление | Назначение |
 |------|-------------|------------|
@@ -51,6 +51,7 @@ Preload-скрипт отдаёт `window.api` из шести членов:
 | `win(action)` | страница → main, в одну сторону | `minimize`, `toggleMaximize`, `close` для собственной шапки окна |
 | `onWinState(cb)` | main → страница | Сообщает странице, развёрнуто ли окно, чтобы она нарисовала нужную кнопку |
 | `onUpdateState(cb)` | main → страница | Присылает состояние обновления (проверка, скачивание, готово…) |
+| `onGameUpdated(cb)` | main → страница | Присылает игру, данные которой изменились в фоне (например, время в игре после закрытия игры) |
 | `pathForFile(file)` | страница → preload | Путь к файлу, брошенному в окно (`webUtils.getPathForFile`) |
 
 ### Команды
@@ -64,8 +65,8 @@ Preload-скрипт отдаёт `window.api` из шести членов:
 | `get_missing` | нет | id игр, файлов которых больше нет |
 | `get_assets` | `{ id }` | `{ icon, banner, logo }` в виде data URL (или `null`) |
 | `preview_image` | `{ path }` | data URL выбранного файла до сохранения |
-| `add_game` | `{ name, exePath, args, images, hero }` | Представление новой игры |
-| `update_game` | `{ id, name, exePath, args, images, hero }` | Обновлённое представление игры |
+| `add_game` | `{ name, exePath, args, playtimeSec, images, hero }` | Представление новой игры |
+| `update_game` | `{ id, name, exePath, args, playtimeSec, images, hero }` | Обновлённое представление игры |
 | `launch_game` | `{ id }` | Представление игры с новым `last_played` |
 | `toggle_favorite` | `{ id }` | Обновлённое представление игры |
 | `remove_game` | `{ id }` | ничего |

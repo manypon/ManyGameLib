@@ -34,6 +34,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - On first launch the library is empty and the app asks you to add your first game: **game path**, **icon** (optional) and **name** (taken from the file or folder name by default).
 - Grid and list views, search, sorting, favorites, recent games and a details view.
 - **Editable top block.** When adding (or later via "Edit") you choose what the top of the library shows for the game: a blurred cover, your own banner image or a plain color as the background, a logo image instead of the title, and the cover on the right (cropped or shown whole). A live preview updates as you change options.
+- **Playtime:** counted while the game you started is running (runs shorter than a minute are ignored), shown in the top block and in the details, sortable, and editable by hand.
 - **Drag and drop:** drop `.exe`, `.jar`, `.lnk` and other game files into the window. The add form opens with the path, name and icon filled in; several files go one after another.
 - **Icon from the game file:** for `.exe` and `.lnk` the icon is taken automatically when you add a game (or with the "From file" button); you can always pick your own picture.
 - **Launch arguments** per game (for `.exe`, `.com` and `.jar`), for example `-windowed -nolauncher`.

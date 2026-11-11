@@ -47,6 +47,7 @@ A JSON array of game objects:
   "hero": { "bg": "blur", "art": true, "fit": "cover" },
   "favorite": false,
   "last_played": 1731300000000,
+  "playtime_sec": 45000,
   "added_at": 1731234567890
 }
 ```
@@ -56,6 +57,7 @@ A JSON array of game objects:
 - `*_file` fields hold only a file name inside `icons/`, never a path, so the folder can be moved to another computer.
 - `hero` is normalized on every read: unknown values fall back to `blur`, `true` and `cover` (see [Images](images.md)).
 - `exe_path` is an absolute path as chosen by the user.
+- `playtime_sec` is the time played, in seconds (integer, at most 100,000 hours; a missing field means 0). It is added to automatically and can be set by hand, see [Launching](launching.md).
 - `args` is the launch arguments as one string (empty by default; older games may not have the field). Line breaks and control characters are removed, at most 1000 characters.
 - Times are Unix milliseconds.
 

@@ -42,7 +42,7 @@ The page cannot read or write arbitrary files. File paths for games and images c
 
 ## The IPC contract
 
-The preload script exposes `window.api` with six members:
+The preload script exposes `window.api` with seven members:
 
 | Member | Direction | Purpose |
 |--------|-----------|---------|
@@ -51,6 +51,7 @@ The preload script exposes `window.api` with six members:
 | `win(action)` | page → main, one-way | `minimize`, `toggleMaximize`, `close` for the custom title bar |
 | `onWinState(cb)` | main → page | Tells the page when the window is maximized/restored, so it can draw the right button |
 | `onUpdateState(cb)` | main → page | Pushes the update state (checking, downloading, ready…) |
+| `onGameUpdated(cb)` | main → page | Sends a game whose data changed in the background (for example, the playtime after a game closed) |
 | `pathForFile(file)` | page → preload | The path of a file dropped into the window (`webUtils.getPathForFile`) |
 
 ### Commands
@@ -64,8 +65,8 @@ The preload script exposes `window.api` with six members:
 | `get_missing` | none | Ids of games whose file no longer exists |
 | `get_assets` | `{ id }` | `{ icon, banner, logo }` as data URLs (or `null`) |
 | `preview_image` | `{ path }` | Data URL for a picked file, before saving |
-| `add_game` | `{ name, exePath, args, images, hero }` | The new game view |
-| `update_game` | `{ id, name, exePath, args, images, hero }` | The updated game view |
+| `add_game` | `{ name, exePath, args, playtimeSec, images, hero }` | The new game view |
+| `update_game` | `{ id, name, exePath, args, playtimeSec, images, hero }` | The updated game view |
 | `launch_game` | `{ id }` | The game view with the new `last_played` |
 | `toggle_favorite` | `{ id }` | The updated game view |
 | `remove_game` | `{ id }` | nothing |

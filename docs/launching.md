@@ -11,7 +11,7 @@ Launching is handled entirely by the main process (`spawnGame()` in `main.js`). 
 3. If the file no longer exists, fail with "file not found".
 4. Mark the launch time, then start the process.
 5. On failure, clear the mark (so the user can retry at once) and report the error.
-6. On success, set `last_played` to now, save the library and return the updated game.
+6. On success, set `last_played` to now, save the library, start following the process for playtime (see below) and return the updated game.
 
 ## How each file type is started
 
@@ -48,6 +48,18 @@ The app looks for `javaw.exe` in this order and uses the first one that exists:
 Registry reads use `reg query` with a 4-second timeout and are skipped on non-Windows systems.
 
 If nothing is found, the user gets a clear message ("Java not found. Install Java (JRE 8 or newer) or set JAVA_HOME") and **nothing else is opened**. The app deliberately does not fall back to the Windows file association, because on many PCs `.jar` is bound to an archiver, which would open the file as an archive instead of running it.
+
+## Playtime
+
+The time spent in a game is counted automatically, in `playtime_sec`.
+
+- **What is counted.** The time from the start of the process that ManyGameLib started (the game `.exe`, `.com`, or `javaw` for a `.jar`) until that process exits. Its `exit` event ends the session and the seconds are added to the game and saved (the page is told with the `game-updated` event).
+- **Sessions shorter than 60 seconds are ignored**, so a game that crashed at once or a launcher that opens and closes does not add noise.
+- **One session per game.** If a second copy is started while the first is still running, only the first process defines the session, so the time is not doubled.
+- **Closing ManyGameLib during a game.** The game keeps running; on exit (`before-quit`) the time up to that moment is saved. What the game is played afterwards is not counted. A crash of ManyGameLib loses the running session.
+- **Not counted at all:** games started through the Windows shell (`.lnk`, `.url`, `.bat`, `.cmd`, `.msi`, and an `.exe` that needed the UAC fallback), because there is no process to follow. Launchers that start the real game and quit are counted only as long as the launcher runs. For these the value can be set by hand.
+- **By hand.** The edit and add forms have a field "Наиграно, ч" (hours, decimals with a comma or a point). `add_game` and `update_game` accept `playtimeSec`: a number sets the value, `undefined`, `null` or an empty value leaves it as it is, and an invalid number is rejected ("Время в игре задано неверно."). The form sends the value only if the user touched the field, so the automatic value is not overwritten by the rounding of the displayed hours.
+- **Display.** `12,5 h` style: one decimal up to 100 hours, whole hours above, "меньше 0,1 ч" for tiny values. It is shown in the top block, in the "About" window and as the sort "По времени в игре".
 
 ## Repeat protection
 

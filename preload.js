@@ -26,5 +26,6 @@ contextBridge.exposeInMainWorld('api', {
   pathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
   win: (action) => ipcRenderer.send('win', action),
   onUpdateState: (cb) => ipcRenderer.on('update-state', (_event, s) => cb(s)),
+  onGameUpdated: (cb) => ipcRenderer.on('game-updated', (_event, g) => cb(g)),
   onWinState: (cb) => ipcRenderer.on('win-state', (_event, maximized) => cb(!!maximized)),
 });

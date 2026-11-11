@@ -351,6 +351,24 @@ function normalizeHero(h) {
 
 /* Игра для интерфейса. Тяжёлые картинки (баннер, логотип) не пересылаем
    со всем списком, интерфейс запрашивает их отдельно для выбранной игры. */
+/* Время в игре: playtime_sec (секунды). Считаем, пока жив запущенный нами процесс игры.
+   Запуски короче минуты не учитываем (игра вылетела сразу или запустился лаунчер и закрылся). */
+const MIN_SESSION_SEC = 60;
+const MAX_PLAYTIME_SEC = 100000 * 3600;
+
+/* Время, заданное вручную: undefined/null/'' означает «не менять». */
+function cleanPlaytime(v) {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > MAX_PLAYTIME_SEC) throw new Error('Время в игре задано неверно.');
+  return Math.round(n);
+}
+
+function playtimeOf(g) {
+  const n = Math.floor(Number(g && g.playtime_sec));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_PLAYTIME_SEC) : 0;
+}
+
 function view(g) {
   return {
     id: g.id,
@@ -363,6 +381,7 @@ function view(g) {
     hero: normalizeHero(g.hero),
     favorite: !!g.favorite,
     last_played: g.last_played ?? null,
+    playtime_sec: playtimeOf(g),
     added_at: g.added_at,
     missing: !isFile(g.exe_path),
   };
@@ -541,7 +560,7 @@ function spawnProcess(cmd, args, cwd) {
       return;
     }
     child.once('error', reject);
-    child.once('spawn', () => { child.unref(); resolve(); });
+    child.once('spawn', () => { child.unref(); resolve(child); });
   });
 }
 
@@ -638,6 +657,7 @@ async function findJavaw() {
    - jar: через найденный javaw (-jar), без обращения к программе, назначенной в Windows;
    - всё остальное (lnk, bat, cmd, url, msi…): через оболочку Windows, без параметров.
    Параметры игры (args) передаются только для exe, com и jar, и всегда списком, не строкой для оболочки. */
+/* Возвращает дочерний процесс (exe, com, jar) или null, если запуск прошёл через оболочку Windows. */
 async function spawnGame(file, argsLine = '') {
   const ext = extOf(file);
   const argv = ARGS_TYPES.includes(ext) ? parseArgs(cleanArgs(argsLine)) : [];
@@ -649,25 +669,59 @@ async function spawnGame(file, argsLine = '') {
       throw new Error('Java не найдена. Установите Java (JRE 8 или новее) или задайте переменную JAVA_HOME, затем повторите.');
     }
     logLine('info', `Java: ${javaw}`);
-    try { await spawnProcess(javaw, ['-jar', file, ...argv], cwd); }
+    try { return await spawnProcess(javaw, ['-jar', file, ...argv], cwd); }
     catch (e) { throw new Error(`Не удалось запустить Java (${javaw}): ${e.message}`); }
-    return;
   }
 
   if (ext === 'exe' || ext === 'com') {
     try {
-      await spawnProcess(file, argv, cwd);
+      return await spawnProcess(file, argv, cwd);
     } catch (e) {
       // Через оболочку (например, чтобы показать окно UAC) параметры передать нельзя.
       if (argv.length) {
         throw new Error(`${e.message}. Если игре нужны права администратора, запустите её без параметров или вручную.`);
       }
       try { await openViaShell(file); } catch { throw e; }
+      return null;   // запущена через оболочку: процесса у нас нет, время не считаем
     }
-    return;
   }
 
   await openViaShell(file);
+  return null;
+}
+
+/* ---------- Время в игре ---------- */
+
+const sessions = new Map(); // id игры -> { start }
+
+function trackSession(id, child) {
+  if (!child || sessions.has(id)) return;   // одна сессия на игру, второй экземпляр не удваивает время
+  sessions.set(id, { start: Date.now() });
+  child.once('exit', () => endSession(id));
+}
+
+function endSession(id) {
+  const s = sessions.get(id);
+  if (!s) return;
+  sessions.delete(id);
+  addPlaytime(id, Math.round((Date.now() - s.start) / 1000));
+}
+
+function addPlaytime(id, sec) {
+  if (sec < MIN_SESSION_SEC) return;
+  const g = games.find((x) => x.id === id);
+  if (!g) return;   // игру успели убрать из библиотеки
+  const prev = playtimeOf(g);
+  g.playtime_sec = Math.min(prev + sec, MAX_PLAYTIME_SEC);
+  try {
+    saveGames();
+  } catch (e) {
+    g.playtime_sec = prev;
+    logLine('error', `время в игре не сохранено: ${e.message}`);
+    return;
+  }
+  logLine('info', `время: ${g.name} +${sec} с`);
+  if (win && !win.isDestroyed()) win.webContents.send('game-updated', view(g));
 }
 
 /* ---------- Команды для интерфейса ---------- */
@@ -794,7 +848,8 @@ function registerHandlers() {
     return data ? `data:image/png;base64,${data.toString('base64')}` : null;
   });
 
-  handle('add_game', async ({ name, exePath, args, images, hero }) => {
+  handle('add_game', async ({ name, exePath, args, playtimeSec, images, hero }) => {
+    const playtime = cleanPlaytime(playtimeSec);
     name = cleanName(name);
     checkExe(exePath, null);
     images = await prepareImages(images, exePath);
@@ -807,7 +862,7 @@ function registerHandlers() {
     // если исходные файлы удалят или переместят.
     const { fields, created } = applyImages(null, images, id);
     const game = {
-      id, name, exe_path: exePath, args: cleanArgs(args), ...fields, hero: normalizeHero(hero),
+      id, name, exe_path: exePath, args: cleanArgs(args), playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero),
       favorite: false, last_played: null, added_at: Date.now(),
     };
     try {
@@ -819,7 +874,8 @@ function registerHandlers() {
     return view(game);
   });
 
-  handle('update_game', async ({ id, name, exePath, args, images, hero }) => {
+  handle('update_game', async ({ id, name, exePath, args, playtimeSec, images, hero }) => {
+    const playtime = cleanPlaytime(playtimeSec);
     const old = findGame(id);
     name = cleanName(name);
     checkExe(exePath, id);
@@ -827,6 +883,7 @@ function registerHandlers() {
 
     const { fields, created, obsolete } = applyImages(old, images, id);
     const next = { ...old, name, exe_path: exePath, args: cleanArgs(args), ...fields, hero: normalizeHero(hero) };
+    if (playtime !== undefined) next.playtime_sec = playtime;   // не прислали: время остаётся как есть
     try {
       commit(games.map((g) => (g === old ? next : g)));
     } catch (e) {
@@ -843,14 +900,16 @@ function registerHandlers() {
     if (last && Date.now() - last < LAUNCH_LOCK_MS) return view(g); // игра только что запущена
     if (!isFile(g.exe_path)) throw new Error(`Файл игры не найден: ${g.exe_path}`);
     launchedAt.set(id, Date.now()); // ставим сразу, чтобы второй запрос не прошёл, пока идёт первый
+    let child = null;
     try {
-      await spawnGame(g.exe_path, g.args);
+      child = await spawnGame(g.exe_path, g.args);
     } catch (e) {
       launchedAt.delete(id); // не запустилась, можно пробовать снова
       throw new Error(`Не удалось запустить игру: ${e.message}`);
     }
     g.last_played = Date.now();
     saveGames();
+    trackSession(id, child);
     logLine('info', `запуск: ${g.name} (${g.exe_path})${cleanArgs(g.args) && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [с параметрами]' : ''}`);
     return view(g);
   });
@@ -982,5 +1041,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
+  // Игры продолжат работать после нашего выхода: время, прошедшее до него, сохраняем сейчас.
+  app.on('before-quit', () => { for (const id of [...sessions.keys()]) endSession(id); });
   app.on('window-all-closed', () => app.quit());
 }
