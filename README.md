@@ -38,6 +38,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu.
 - **Settings page:** an app background (a bundled picture, your own or none) with blur and dimming sliders, an option to turn off the top block card, autostart with Windows, an optional log file, and a custom Java path for `.jar` files.
+- **Updates:** the app checks GitHub for a newer version (can be turned off in Settings). With the installer it downloads and installs the update on your button; the portable folder only points you to the release page.
 - Supported files: `.exe`, `.jar` (runs through Java, which must be installed; the app looks for `javaw` in PATH, `JAVA_HOME`, the Windows registry and the usual Program Files folders), `.lnk` and `.url` shortcuts, plus `.bat`, `.cmd` and `.msi`. Any other file opens with the program Windows has assigned to it.
 - Games start in their own folder. If a game needs administrator rights, Windows shows the UAC prompt.
 - "Remove from library" deletes only the library entry. Your game files are never touched.
@@ -71,6 +72,7 @@ For the top block: a banner around 1920×620, and a logo as a PNG with a transpa
 manygamelib/
 ├─ main.js        game storage, process launching, file dialogs
 ├─ preload.js     safe bridge between the UI and main.js
+├─ updater.js     update check, download and install
 ├─ ui/            interface (index.html, style.css, app.js, assets/)
 ├─ build/         app icons
 ├─ docs/          technical documentation
@@ -80,7 +82,7 @@ manygamelib/
 
 ## Documentation
 
-How the app works inside (architecture, storage and backups, settings, images, launching, interface, build and release): [docs/](docs/README.md). Every page is in English and Russian.
+How the app works inside (architecture, storage and backups, settings, updates, images, launching, interface, build and release): [docs/](docs/README.md). Every page is in English and Russian.
 
 ## License
 

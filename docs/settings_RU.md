@@ -16,7 +16,8 @@
   "heroBackground": true,
   "autostart": false,
   "logging": false,
-  "javaPath": ""
+  "javaPath": "",
+  "checkUpdates": true
 }
 ```
 
@@ -29,6 +30,7 @@
 | `heroBackground` | `true` / `false` | `true` | Есть ли у верхнего блока своя карточка с фоном |
 | `autostart` | `true` / `false` | `false` | Запускать вместе с Windows |
 | `logging` | `true` / `false` | `false` | Писать `logs\manygamelib.log` |
+| `checkUpdates` | `true` / `false` | `true` | Проверять GitHub на новую версию после запуска (см. [Обновления](updates_RU.md)) |
 | `javaPath` | строка до 500 символов | `""` | Конкретный `javaw.exe` для `.jar`; пусто означает «искать автоматически» |
 
 ## Чтение, проверка, сохранение
@@ -41,7 +43,7 @@
 - `background.file` принимается, только если это простое имя файла (`path.basename(x) === x`), поэтому вручную исправленный файл не может указать за пределы `icons\`;
 - `mode: custom` без файла становится `default`.
 
-**`mergeSettings(patch)`** накладывает частичное изменение на текущие настройки. Копируются только известные ключи (`heroBackground`, `autostart`, `logging`, `javaPath` и `background.mode/blur/dim`). Страница не может задать `background.file` напрямую: это поле меняют только `set_wallpaper` и `clear_wallpaper`.
+**`mergeSettings(patch)`** накладывает частичное изменение на текущие настройки. Копируются только известные ключи (`heroBackground`, `autostart`, `logging`, `javaPath`, `checkUpdates` и `background.mode/blur/dim`). Страница не может задать `background.file` напрямую: это поле меняют только `set_wallpaper` и `clear_wallpaper`.
 
 **`saveSettings(next)`** пишет `settings.json.tmp`, копирует текущий файл в `settings.json.bak`, затем переименовывает временный файл поверх настоящего (с тем же коротким повтором при занятом файле, что и у библиотеки).
 
@@ -67,9 +69,9 @@
 | `clear_wallpaper` | нет | Настройки (картинка убрана) |
 | `get_wallpaper` | нет | Своя картинка в виде data URL или `null` |
 | `get_app_info` | нет | `{ version, dataDir, repo, license, electron, chrome, node, packaged }` |
-| `open_external` | `{ target }` | ничего; `target` это `data`, `logs` или `repo` |
+| `open_external` | `{ target }` | ничего; `target` это `data`, `logs`, `repo` или `release` |
 
-`open_external` получает **ключевое слово**, а не путь или адрес: главный процесс сам сопоставляет `data`, `logs` и `repo` с папкой данных, папкой журнала и страницей проекта. Всё остальное отклоняется, поэтому страница не может через эту команду открыть произвольный файл или ссылку. Окно также не уходит на другие адреса и не открывает новые окна (`setWindowOpenHandler` и `will-navigate`).
+`open_external` получает **ключевое слово**, а не путь или адрес: главный процесс сам сопоставляет `data`, `logs`, `repo` и `release` с папкой данных, папкой журнала, страницей проекта и страницей последнего релиза. Всё остальное отклоняется, поэтому страница не может через эту команду открыть произвольный файл или ссылку. Окно также не уходит на другие адреса и не открывает новые окна (`setWindowOpenHandler` и `will-navigate`).
 
 ## Фон приложения
 
@@ -134,7 +136,7 @@
 | Общие | Автозапуск, журнал (и «Открыть папку», когда включён), сброс |
 | Внешний вид | Режим фона, своя картинка, размытие, затемнение, фон верхнего блока |
 | Библиотека | Число игр, игры с пропавшим файлом, папка данных, путь к Java, краткие сведения о копиях |
-| О приложении | Версия, Electron, Chromium, Node.js, лицензия, ссылка на репозиторий |
+| О приложении | Карточка обновлений (см. [Обновления](updates_RU.md)), версия, Electron, Chromium, Node.js, лицензия, ссылка на репозиторий |
 
 Страница собирается из небольших помощников: `settingsCard`, `settingRow`, `toggle`, `slider` и уже существовавшего `segmented`. Данные для «О приложении» и папки данных приходят из `get_app_info` через `ensureAppInfo()`.
 

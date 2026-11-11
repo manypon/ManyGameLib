@@ -2,7 +2,7 @@
 
 [English](ui.md) | [Русский](ui_RU.md)
 
-The interface is plain HTML, CSS and one script, `ui/app.js` (about 1400 lines). There is no framework and no build step. This page explains how it is structured and the few non-obvious decisions in it.
+The interface is plain HTML, CSS and one script, `ui/app.js` (about 1500 lines). There is no framework and no build step. This page explains how it is structured and the few non-obvious decisions in it.
 
 ## State
 
@@ -22,6 +22,7 @@ All UI state lives in one object:
 | `wallpaper` | The user's own app background as a data URL, loaded only in `custom` mode |
 | `settingsTab` | The open tab of the Settings page (`general`, `appearance`, `library`, `about`) |
 | `appInfo` | Version, data folder and runtime versions from `get_app_info`, loaded once |
+| `update` | The update state pushed by the main process (see [Updates](updates.md)) |
 
 The source of truth for the library is the main process. After each command the UI replaces the updated game in `state.games` (`upsert`) or reloads the list (`refresh`).
 

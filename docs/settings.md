@@ -16,7 +16,8 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
   "heroBackground": true,
   "autostart": false,
   "logging": false,
-  "javaPath": ""
+  "javaPath": "",
+  "checkUpdates": true
 }
 ```
 
@@ -29,6 +30,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 | `heroBackground` | `true` / `false` | `true` | Whether the top block has its own card background |
 | `autostart` | `true` / `false` | `false` | Start with Windows |
 | `logging` | `true` / `false` | `false` | Write `logs\manygamelib.log` |
+| `checkUpdates` | `true` / `false` | `true` | Check GitHub for a newer version after startup (see [Updates](updates.md)) |
 | `javaPath` | string up to 500 chars | `""` | A specific `javaw.exe` for `.jar` files; empty means "search automatically" |
 
 ## Reading, validating, saving
@@ -41,7 +43,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 - `background.file` is accepted only if it is a bare file name (`path.basename(x) === x`), so a hand-edited file cannot point outside `icons\`;
 - `mode: custom` without a file becomes `default`.
 
-**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `autostart`, `logging`, `javaPath`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
+**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `autostart`, `logging`, `javaPath`, `checkUpdates`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
 
 **`saveSettings(next)`** writes `settings.json.tmp`, copies the current file to `settings.json.bak`, then renames the temporary file over the real one (with the same short retry on locked files as the library).
 
@@ -67,9 +69,9 @@ Unlike the library, there is no "Retry / Exit" dialog: settings are not critical
 | `clear_wallpaper` | none | The settings (picture removed) |
 | `get_wallpaper` | none | The user's picture as a data URL, or `null` |
 | `get_app_info` | none | `{ version, dataDir, repo, license, electron, chrome, node, packaged }` |
-| `open_external` | `{ target }` | nothing; `target` is `data`, `logs` or `repo` |
+| `open_external` | `{ target }` | nothing; `target` is `data`, `logs`, `repo` or `release` |
 
-`open_external` receives a **keyword**, not a path or a URL: the main process maps `data`, `logs` and `repo` to the data folder, the logs folder and the project page. Anything else is rejected, so the page cannot open arbitrary files or links through it. The window also refuses to navigate and to open new windows (`setWindowOpenHandler` and `will-navigate`).
+`open_external` receives a **keyword**, not a path or a URL: the main process maps `data`, `logs`, `repo` and `release` to the data folder, the logs folder, the project page and the latest release page. Anything else is rejected, so the page cannot open arbitrary files or links through it. The window also refuses to navigate and to open new windows (`setWindowOpenHandler` and `will-navigate`).
 
 ## App background
 
@@ -134,7 +136,7 @@ It records app start (version, Electron, platform), game launches, the Java that
 | General (Общие) | Autostart, logging (and "Open folder" when on), reset |
 | Appearance (Внешний вид) | Background mode, own picture, blur, dim, top block background |
 | Library (Библиотека) | Game count, games with a missing file, data folder, Java path, short backup info |
-| About (О приложении) | Version, Electron, Chromium, Node.js, license, link to the repository |
+| About (О приложении) | Updates card (see [Updates](updates.md)), version, Electron, Chromium, Node.js, license, link to the repository |
 
 The page is built from small helpers: `settingsCard`, `settingRow`, `toggle`, `slider`, and the existing `segmented`. Data for About and the data folder come from `get_app_info` through `ensureAppInfo()`.
 

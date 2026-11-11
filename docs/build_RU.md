@@ -4,7 +4,7 @@
 
 ## Требования
 
-Node.js (LTS). Компиляторы и нативные инструменты сборки не нужны: нативных модулей в приложении нет. Единственные dev-зависимости — Electron и electron-builder, runtime-зависимостей нет.
+Node.js (LTS). Компиляторы и нативные инструменты сборки не нужны: нативных модулей в приложении нет. Dev-зависимости: Electron, electron-builder и `rcedit`. Единственная runtime-зависимость это `electron-updater` (см. [Обновления](updates_RU.md)).
 
 ## Запуск из исходников
 
@@ -40,13 +40,19 @@ npm run build      # выполняет: electron-builder
 | Параметр | Значение | Зачем |
 |----------|----------|-------|
 | `appId` / `productName` | `com.manygamelib.app` / `ManyGameLib` | Идентификатор и имя exe |
-| `files` | `main.js`, `preload.js`, `ui/**/*`, `build/**/*` | В пакет попадает только то, что нужно приложению |
+| `files` | `main.js`, `preload.js`, `updater.js`, `ui/**/*`, `build/**/*` (без `build/afterPack.js`) | В пакет попадает только то, что нужно приложению |
+| `afterPack` | `build/afterPack.js` | Вписывает иконку и сведения о версии в exe (см. ниже) |
+| `publish` | GitHub, `manypon/ManyGameLib` | Заставляет electron-builder писать `latest.yml` и `app-update.yml` для обновлятора; сама сборка ничего не публикует |
 | `electronDist` | `node_modules/electron/dist` | Использовать Electron, уже установленный `npm install`, а не скачивать его заново во время сборки |
 | `directories.output` | `dist` | Папка результата сборки |
 | `win.target` | `dir`, `nsis` | Распакованная папка (портативная версия) и установщик NSIS |
 | `nsis` | см. ниже | Поведение установщика |
 | `win.icon` | `build/icon.ico` | Значок приложения |
-| `win.signAndEditExecutable` | `false` | Пропускает шаг, который правит exe и требует дополнительных инструментов; цена — exe сохраняет стандартные метаданные Electron |
+| `win.signAndEditExecutable` | `false` | Пропускает собственную правку exe в electron-builder: она требует winCodeSign и права на символьные ссылки и падает с `EPERM` на обычной учётной записи Windows. Вместо неё работает `afterPack` |
+
+### Иконка exe: `afterPack`
+
+При `signAndEditExecutable: false` exe осталось бы со стандартной иконкой Electron (атом), а ярлыки Windows, поиск и панель задач берут иконку именно из exe. `build/afterPack.js` запускается после сборки приложения и через пакет `rcedit` вписывает в `ManyGameLib.exe` иконку `build/icon.ico`, название продукта, версию и авторские права. Ничего скачивать не нужно. Если ярлык после обновления всё ещё показывает старую иконку, это кэш иконок Windows; он обновится после перезагрузки.
 
 ### Установщик
 
@@ -77,7 +83,7 @@ npm run build      # выполняет: electron-builder
 3. Выполняет `node node_modules/electron/install.js`, чтобы гарантированно получить бинарник Electron, ведь `electronDist` в `package.json` указывает на него.
 4. Выполняет `npm run build`.
 5. Загружает `dist/win-unpacked/` как артефакт workflow с именем `ManyGameLib-Windows`, а установщик как `ManyGameLib-Installer`.
-6. Упаковывает содержимое `dist/win-unpacked/` в `ManyGameLib-Build.zip` и прикрепляет его вместе с `ManyGameLib-Setup-<версия>.exe` к релизу для тега (`softprops/action-gh-release`, с правом `contents: write` и встроенным `GITHUB_TOKEN`).
+6. Упаковывает содержимое `dist/win-unpacked/` в `ManyGameLib-Build.zip` и прикрепляет его к релизу вместе с `ManyGameLib-Setup-<версия>.exe`, его `.blockmap` и `latest.yml` (последние два нужны обновлятору) для тега (`softprops/action-gh-release`, с правом `contents: write` и встроенным `GITHUB_TOKEN`).
 
 Что важно знать:
 
