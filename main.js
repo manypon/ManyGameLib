@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeImage } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -447,12 +447,56 @@ function copyImage(src, id, kind) {
   return name;
 }
 
+/* Иконка самого файла (exe, lnk, url). Сначала просим у оболочки Windows крупную миниатюру (до 256 px),
+   если не вышло, обычную иконку файла (около 32 px). Вернём PNG или null. */
+const ICON_SIZE = 256;
+const ICON_TYPES = ['exe', 'com', 'lnk', 'url'];
+
+async function extractFileIcon(file) {
+  try {
+    const img = await nativeImage.createThumbnailFromPath(file, { width: ICON_SIZE, height: ICON_SIZE });
+    if (img && !img.isEmpty()) return img.toPNG();
+  } catch { /* на этой системе нет миниатюр или файл не подошёл */ }
+  try {
+    const img = await app.getFileIcon(file, { size: 'large' });
+    if (img && !img.isEmpty()) return img.toPNG();
+  } catch { /* ignore */ }
+  return null;
+}
+
+function writeImageData(data, id, kind) {
+  const name = `${id}-${kind}-${Date.now().toString(36)}.png`;
+  try {
+    fs.writeFileSync(path.join(iconsDir, name), data);
+  } catch (e) {
+    throw new Error(`Не удалось сохранить картинку: ${e.message}`);
+  }
+  return name;
+}
+
+/* Готовит images к applyImages. Принимаем из страницы только mode и path, данные картинки снаружи не берём.
+   Режим icon.mode === 'exe' означает «взять иконку из файла игры»: достаём её здесь и подставляем как данные. */
+async function prepareImages(images, exePath) {
+  const out = {};
+  for (const kind of Object.keys(IMAGE_FIELDS)) {
+    const s = (images && images[kind]) || {};
+    out[kind] = { mode: s.mode, path: s.path };
+  }
+  if (out.icon.mode === 'exe') {
+    if (!ICON_TYPES.includes(extOf(exePath))) throw new Error('Для этого типа файла иконку получить нельзя.');
+    const data = await extractFileIcon(exePath);
+    if (!data) throw new Error('Не удалось получить иконку из файла.');
+    out.icon = { mode: 'set', data };
+  }
+  return out;
+}
+
 function removeImage(name) {
   if (!name) return;
   try { fs.unlinkSync(path.join(iconsDir, name)); } catch { /* ignore */ }
 }
 
-/* images: { icon|banner|logo: { mode: 'keep' | 'set' | 'clear', path } }.
+/* images: { icon|banner|logo: { mode: 'keep' | 'set' | 'clear', path } } (после prepareImages у set может быть data вместо path).
    Возвращает новые поля файлов, список созданных (откатываем при ошибке)
    и список устаревших (удаляем после успешного сохранения). */
 function applyImages(base, images, id) {
@@ -464,7 +508,7 @@ function applyImages(base, images, id) {
       const spec = (images && images[kind]) || {};
       fields[field] = base ? (base[field] ?? null) : null;
       if (spec.mode === 'set') {
-        const name = copyImage(spec.path, id, kind);
+        const name = spec.data ? writeImageData(spec.data, id, kind) : copyImage(spec.path, id, kind);
         created.push(name);
         if (fields[field]) obsolete.push(fields[field]);
         fields[field] = name;
@@ -742,9 +786,18 @@ function registerHandlers() {
   /* Предпросмотр выбранного файла в форме (до сохранения). */
   handle('preview_image', ({ path: p }) => dataUrl(String(p || '')));
 
-  handle('add_game', ({ name, exePath, args, images, hero }) => {
+  /* Иконка файла для формы: data URL с PNG или null. */
+  handle('file_icon', async ({ path: p }) => {
+    p = String(p || '');
+    if (!isFile(p) || !ICON_TYPES.includes(extOf(p))) return null;
+    const data = await extractFileIcon(p);
+    return data ? `data:image/png;base64,${data.toString('base64')}` : null;
+  });
+
+  handle('add_game', async ({ name, exePath, args, images, hero }) => {
     name = cleanName(name);
     checkExe(exePath, null);
+    images = await prepareImages(images, exePath);
 
     let id = Date.now();
     while (games.some((g) => g.id === String(id))) id += 1;
@@ -766,10 +819,11 @@ function registerHandlers() {
     return view(game);
   });
 
-  handle('update_game', ({ id, name, exePath, args, images, hero }) => {
+  handle('update_game', async ({ id, name, exePath, args, images, hero }) => {
     const old = findGame(id);
     name = cleanName(name);
     checkExe(exePath, id);
+    images = await prepareImages(images, exePath);
 
     const { fields, created, obsolete } = applyImages(old, images, id);
     const next = { ...old, name, exe_path: exePath, args: cleanArgs(args), ...fields, hero: normalizeHero(hero) };

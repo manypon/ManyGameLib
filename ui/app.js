@@ -1203,6 +1203,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     exe: game ? game.exe_path : '',
     args: game ? game.args || '' : '',
     nameTouched: editing,
+    iconTouched: false,   // пользователь сам выбирал или убирал иконку: автоиконку из файла больше не подставляем
     hero: { ...DEFAULT_HERO, ...(game ? game.hero : {}) },
     // url — что показываем сейчас; mode и path — что сделать при сохранении:
     // keep (оставить как есть), set (взять файл path), clear (убрать).
@@ -1262,6 +1263,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       st.exe = picked;
       exeInput.value = picked;
       syncArgs();
+      syncFromFile();
+      autoIcon();
       showError('');
       if (!st.nameTouched || !st.name.trim()) {
         const parts = picked.split(/[\\/]/).filter(Boolean);
@@ -1295,15 +1298,52 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       clear);
     const sync = () => {
       const im = st.img[kind];
-      input.value = im.path || (im.url ? 'Текущая картинка' : '');
+      input.value = im.mode === 'exe' ? 'Иконка из файла' : im.path || (im.url ? 'Текущая картинка' : '');
       clear.hidden = !im.url;
     };
     return { row, sync };
   }
 
   const iconRow = imageRow('icon', 'PNG, JPG, ICO… (необязательно)');
+  // Иконка из самого файла игры. Сама подставляется только при добавлении и только для exe и lnk.
+  const ICON_TYPES = ['exe', 'com', 'lnk', 'url'];
+  const AUTO_ICON_TYPES = ['exe', 'lnk'];
+  const extOfExe = () => (st.exe.split('.').pop() || '').toLowerCase();
+  async function fromFile(auto) {
+    const file = st.exe;
+    try {
+      const url = await invoke('file_icon', { path: file });
+      if (file !== st.exe) return;   // за это время выбрали другой файл
+      if (!url) { if (!auto) showError('Не удалось получить иконку из файла.'); return; }
+      Object.assign(st.img.icon, { url, mode: 'exe', path: '' });
+      if (!auto) st.iconTouched = true;
+      showError('');
+      syncImages();
+      updatePreview();
+    } catch (e) {
+      if (!auto) showError(errText(e));
+    }
+  }
+  const fromFileBtn = h('button', {
+    class: 'btn ghost small', type: 'button', title: 'Взять иконку из самого файла игры', onClick: () => fromFile(false),
+  }, 'Из файла');
+  function syncFromFile() { fromFileBtn.hidden = !ICON_TYPES.includes(extOfExe()); }
+  function autoIcon() {
+    const im = st.img.icon;
+    const ext = extOfExe();
+    if (im.mode === 'exe' && !AUTO_ICON_TYPES.includes(ext)) { setAutoClear(); return; }   // файл сменили на другой тип: автоиконка не подходит
+    if (editing || st.iconTouched || !AUTO_ICON_TYPES.includes(ext)) return;
+    if (im.mode === 'exe' || (im.mode === 'keep' && !im.url)) fromFile(true);
+  }
+  function setAutoClear() {
+    Object.assign(st.img.icon, { url: null, mode: had.icon ? 'clear' : 'keep', path: '' });
+    syncImages();
+    updatePreview();
+  }
+
   const bannerRow = imageRow('banner', 'Широкая картинка, например 1920×620');
   const logoRow = imageRow('logo', 'PNG с прозрачным фоном (необязательно)');
+  iconRow.row.insertBefore(fromFileBtn, iconRow.row.lastElementChild);
 
   const iconPick = h('button', {
     class: 'icon-pick', type: 'button', title: 'Выбрать иконку', onClick: () => pickImage('icon'),
@@ -1320,6 +1360,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
 
   function setImage(kind, path, url) {
     const im = st.img[kind];
+    if (kind === 'icon') st.iconTouched = true;
     if (path) {
       im.path = path; im.url = url; im.mode = 'set';
     } else {
@@ -1436,7 +1477,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
         iconPick,
         h('div', { class: 'icon-side' },
           iconRow.row,
-          h('span', { class: 'hint' }, 'Лучше всего квадрат 512×512 или вертикальная обложка 600×900. Без неё будет цветная плитка с первой буквой.')))),
+          h('span', { class: 'hint' }, 'Лучше всего квадрат 512×512 или вертикальная обложка 600×900. Для exe иконка берётся из самого файла, но она небольшая: своя картинка выглядит чётче. Без иконки будет цветная плитка с первой буквой.')))),
     h('div', { class: 'hero-cfg' },
       h('div', { class: 'section-title' }, 'Верхний блок'),
       h('p', { class: 'hint' }, 'Так игра выглядит вверху библиотеки, когда она выбрана. Предпросмотр ниже обновляется сразу.'),
@@ -1457,6 +1498,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
   form.isDirty = () => !st.busy && snap() !== initial;
 
   syncImages();
+  syncFromFile();
   syncHero();
   updatePreview();
   if (autofocus) setTimeout(() => exeInput.focus(), 60);

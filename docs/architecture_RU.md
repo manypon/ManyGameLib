@@ -79,6 +79,7 @@ Preload-скрипт отдаёт `window.api` из пяти членов:
 | `check_update` | нет | Состояние после проверки |
 | `download_update` | нет | Состояние (`downloading`) |
 | `install_update` | нет | ничего; ставит обновление и перезапускает |
+| `file_icon` | `{ path }` | Иконка файла игры как data URL или `null` |
 | `get_app_info` | нет | Версия, папка данных, версии Electron/Chromium/Node, лицензия, `packaged` |
 | `open_external` | `{ target }` | ничего; `target` это ключевое слово `data`, `logs` или `repo` |
 

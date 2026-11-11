@@ -37,6 +37,7 @@ images: {
 | `keep` (or missing) | The current file name stays |
 | `set` | The file at `path` is validated and copied; its name replaces the old one |
 | `clear` | The field becomes `null` |
+| `exe` | Only for `icon`: take the icon from the game's own file (see below) |
 
 `applyImages()` does the work and returns three things: the new field values, the files it **created**, and the files that became **obsolete** (replaced or cleared).
 
@@ -46,6 +47,24 @@ Consistency rules:
 - If saving `games.json` fails after the copy, the created files are deleted (the list rolls back, see [Storage](storage.md)).
 - Obsolete files are deleted only **after** the library was saved successfully. A failed save never loses the old picture.
 - `remove_game` deletes the game's image files after saving the list. It never touches the game's own files.
+
+## Icon from the game's file
+
+For `.exe`, `.com`, `.lnk` and `.url` files the icon can be taken from the file itself (`extractFileIcon`):
+
+1. A large thumbnail from the Windows shell, up to 256 px (`nativeImage.createThumbnailFromPath`).
+2. If that fails, the ordinary file icon, about 32 px (`app.getFileIcon`). It is small and looks soft on a big tile, so the form suggests picking your own picture for a sharper result.
+
+The result is a PNG written to `icons/` like any other image (`<gameId>-icon-<random>.png`). If neither method works, the request fails with "Не удалось получить иконку из файла." and nothing is created.
+
+The form uses this in two ways:
+
+- **Automatically when adding a game** (only for `.exe` and `.lnk`): if the user has not chosen or removed an icon, the file's icon is shown and sent with `mode: 'exe'`. If the user then picks a file of another type, the automatic icon is removed. Once the user picks or removes an icon themselves, it is never replaced automatically. The automatic icon is not applied when editing an existing game.
+- **The "From file" button** (also for `.url`): the same, on demand, in add and edit forms.
+
+The command `file_icon` `{ path }` returns the icon as a data URL for the form preview, or `null`. With `mode: 'exe'` the main process extracts the icon again at save time, so no temporary files are needed. `prepareImages()` takes only `mode` and `path` from the page, never image data, so the page cannot write arbitrary bytes into `icons/`.
+
+Generic types such as `.bat` or `.jar` have no icon of their own (Windows would return a standard file icon), so they are never offered.
 
 ## Sending images to the page
 

@@ -79,6 +79,7 @@ The preload script exposes `window.api` with five members:
 | `check_update` | none | The state after a check |
 | `download_update` | none | The state (`downloading`) |
 | `install_update` | none | nothing; installs and restarts |
+| `file_icon` | `{ path }` | The icon of a game file as a data URL, or `null` |
 | `get_app_info` | none | Version, data folder, Electron/Chromium/Node versions, license, `packaged` |
 | `open_external` | `{ target }` | nothing; `target` is the keyword `data`, `logs` or `repo` |
 
