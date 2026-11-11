@@ -15,11 +15,11 @@ npm install
 npm start
 ```
 
-Или двойной клик по `start.bat`: при первом запуске он сам выполнит `npm install`.
+Или двойной клик по `start.bat`: он сам выполнит `npm install`.
 
 ## Сборка готового приложения
 
-Двойной клик по `build.bat`: он закроет запущенное приложение, при необходимости поставит зависимости, удалит старую сборку и соберёт новую. Или вручную:
+Двойной клик по `build.bat`: он закроет запущенное приложение, поставит зависимости, удалит старую сборку и соберёт новую. Или вручную:
 
 ```powershell
 npm run build
@@ -27,7 +27,7 @@ npm run build
 
 Результат: установщик `dist\ManyGameLib-Setup-<версия>.exe` и портативная папка `dist\win-unpacked\ManyGameLib.exe`. Папку `win-unpacked` можно переносить целиком, Node.js для её запуска не нужен.
 
-Если Electron не скачивается (ошибка 504 или сетевая), можно собрать вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а в `resources\app` положите `main.js`, `preload.js`, `package.json`, `ui` и `build`.
+Если Electron не скачивается (ошибка 504 или сетевая), можно собрать вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а в `resources\app` положите `main.js`, `preload.js`, `updater.js`, `package.json`, `ui` и `build`.
 
 ## Как это работает
 

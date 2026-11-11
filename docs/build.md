@@ -13,7 +13,7 @@ npm install
 npm start          # runs: electron .
 ```
 
-`start.bat` does the same by double-click: it runs `npm install` if `node_modules` is missing, then starts `node_modules\electron\dist\electron.exe .`.
+`start.bat` does the same by double-click: it runs `npm install`, then starts `node_modules\electron\dist\electron.exe .`.
 
 ## Building
 
@@ -24,7 +24,7 @@ npm run build      # runs: electron-builder
 or double-click `build.bat`. The script:
 
 1. Closes a running `ManyGameLib.exe` (an open copy locks its own file and the build fails with `EPERM ... unlink`).
-2. Runs `npm install` only if `node_modules` is missing.
+2. Runs `npm install` every time. It is fast when nothing changed, and it picks up new dependencies after an update of the project (without it, a missing package fails the build with "Production dependency … not found").
 3. Deletes the old `dist` folder.
 4. Runs `npm run build` and opens the result folder.
 
@@ -62,7 +62,7 @@ The installer is not code-signed, so Windows SmartScreen may warn on the first r
 
 ### If Electron does not download
 
-`npm install` downloads Electron from GitHub. If that fails (for example with a 504), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `package.json`, `ui` and `build` into `resources\app`.
+`npm install` downloads Electron from GitHub. If that fails (for example with a 504), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `updater.js`, `package.json`, `ui` and `build` into `resources\app`.
 
 ## Versions and commits
 

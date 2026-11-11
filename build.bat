@@ -6,11 +6,9 @@ title ManyGameLib build
 echo [1/4] Closing running ManyGameLib...
 taskkill /F /IM ManyGameLib.exe >nul 2>&1
 
-echo [2/4] Checking dependencies...
-if not exist node_modules (
-  call npm install
-  if errorlevel 1 goto fail
-)
+echo [2/4] Installing dependencies...
+call npm install
+if errorlevel 1 goto fail
 
 echo [3/4] Removing old build...
 if exist dist rmdir /s /q dist

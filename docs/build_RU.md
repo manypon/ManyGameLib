@@ -13,7 +13,7 @@ npm install
 npm start          # выполняет: electron .
 ```
 
-`start.bat` делает то же двойным кликом: выполняет `npm install`, если нет `node_modules`, затем запускает `node_modules\electron\dist\electron.exe .`.
+`start.bat` делает то же двойным кликом: выполняет `npm install`, затем запускает `node_modules\electron\dist\electron.exe .`.
 
 ## Сборка
 
@@ -24,7 +24,7 @@ npm run build      # выполняет: electron-builder
 или двойной клик по `build.bat`. Скрипт:
 
 1. Закрывает запущенный `ManyGameLib.exe` (открытая копия блокирует собственный файл, и сборка падает с `EPERM ... unlink`).
-2. Выполняет `npm install` только если нет `node_modules`.
+2. Выполняет `npm install` каждый раз. Если ничего не изменилось, это быстро, а после обновления проекта подхватываются новые зависимости (без этого сборка падает с «Production dependency … not found»).
 3. Удаляет старую папку `dist`.
 4. Запускает `npm run build` и открывает папку с результатом.
 
@@ -62,7 +62,7 @@ npm run build      # выполняет: electron-builder
 
 ### Если Electron не скачивается
 
-`npm install` скачивает Electron с GitHub. Если не вышло (например, ошибка 504), можно собрать приложение вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а `main.js`, `preload.js`, `package.json`, `ui` и `build` положите в `resources\app`.
+`npm install` скачивает Electron с GitHub. Если не вышло (например, ошибка 504), можно собрать приложение вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а `main.js`, `preload.js`, `updater.js`, `package.json`, `ui` и `build` положите в `resources\app`.
 
 ## Версии и коммиты
 

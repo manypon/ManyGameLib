@@ -15,11 +15,11 @@ npm install
 npm start
 ```
 
-Or double-click `start.bat`: on first launch it runs `npm install` for you.
+Or double-click `start.bat`: it runs `npm install` for you.
 
 ## Build the app
 
-Double-click `build.bat`: it closes a running copy of the app, installs dependencies if needed, removes the old build and runs the build. Or by hand:
+Double-click `build.bat`: it closes a running copy of the app, installs dependencies, removes the old build and runs the build. Or by hand:
 
 ```powershell
 npm run build
@@ -27,7 +27,7 @@ npm run build
 
 Output: the installer `dist\ManyGameLib-Setup-<version>.exe` and the portable folder `dist\win-unpacked\ManyGameLib.exe`. The whole `win-unpacked` folder can be moved anywhere, and Node.js is not needed to run it.
 
-If Electron fails to download (a 504 or other network error), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `package.json`, `ui` and `build` into `resources\app`.
+If Electron fails to download (a 504 or other network error), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `updater.js`, `package.json`, `ui` and `build` into `resources\app`.
 
 ## Features
 
