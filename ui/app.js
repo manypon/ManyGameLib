@@ -27,6 +27,7 @@ const state = {
   selectedId: null,
   settingsTab: 'general', // вкладка страницы настроек: general | appearance | library | about
   appInfo: null,        // сведения о приложении для вкладки «О приложении»
+  update: null,         // состояние обновлений из updater.js (status, mode, version, progress, error)
   settings: null,       // настройки приложения (get_settings)
   wallpaper: null,      // data URL своей картинки фона (грузится, только если она выбрана)
 };
@@ -735,18 +736,79 @@ function libraryPanel() {
   ];
 }
 
+/* ---------- Обновления ---------- */
+
+async function updateCommand(cmd) {
+  try { state.update = await invoke(cmd) || state.update; } catch (e) { toast(errText(e), 'error'); }
+  if (state.view === 'settings') render();
+}
+
+function updatesCard() {
+  const u = state.update;
+  const st = state.settings;
+  if (!u || !st) return settingsCard('Обновления', 'Загрузка…');
+  const installer = u.mode === 'installer';
+  const sub = installer
+    ? 'Новые версии берутся из GitHub Releases. Скачивание и установка только по вашей кнопке'
+    : 'Портативная версия: приложение сообщит о новой версии, а скачать её нужно самому';
+  const ver = u.version ? `v${u.version}` : '';
+  const text = {
+    idle: ['Проверка не выполнялась', `Сейчас v${u.current}`],
+    checking: ['Проверяю…', null],
+    none: ['У вас последняя версия', `v${u.current}`],
+    available: [`Доступна версия ${ver}`, `Сейчас v${u.current}`],
+    downloading: [`Скачиваю ${ver}…`, null],
+    ready: [`Версия ${ver} скачана`, 'Приложение закроется, установит обновление и запустится снова'],
+    error: ['Не удалось проверить обновления', u.error],
+  }[u.status] || ['', null];
+  const btn = (label, onClick, kind = 'ghost') => h('button', { class: `btn ${kind} small`, type: 'button', onClick }, label);
+  let control;
+  if (u.status === 'checking') control = btn('Проверяю…', () => {});
+  else if (u.status === 'downloading') {
+    control = h('div', { class: 's-progress-wrap' },
+      h('div', { class: 's-progress' }, h('i', { id: 'updBar', style: `width:${u.progress}%` })),
+      h('span', { class: 's-value', id: 'updPct' }, `${u.progress}%`));
+  } else if (u.status === 'available') {
+    control = installer ? btn('Скачать', () => updateCommand('download_update'), 'primary') : btn('Открыть страницу релиза', () => openTarget('release'), 'primary');
+  } else if (u.status === 'ready') control = btn('Установить и перезапустить', () => updateCommand('install_update'), 'primary');
+  else control = btn('Проверить', () => updateCommand('check_update'));
+  if (u.status === 'checking') control.disabled = true;
+  return settingsCard('Обновления', sub,
+    settingRow(text[0], text[1], control),
+    settingRow('Проверять при запуске', 'Один запрос к GitHub через несколько секунд после старта',
+      toggle(st.checkUpdates, (on) => { st.checkUpdates = on; saveSettingsPatch({ checkUpdates: on }); })));
+}
+
+/* Состояние обновлений пришло из главного процесса. Во время скачивания двигаем только полоску,
+   иначе страница перерисовывалась бы несколько раз в секунду. */
+function onUpdateState(s) {
+  const prev = state.update;
+  state.update = s;
+  if (s.status === 'available' && (!prev || prev.status !== 'available') && !(state.view === 'settings' && state.settingsTab === 'about')) {
+    toast(`Доступна версия v${s.version}. Подробнее: Настройки → О приложении`);
+  }
+  const bar = $('#updBar');
+  if (s.status === 'downloading' && prev && prev.status === 'downloading' && bar) {
+    bar.style.width = `${s.progress}%`;
+    const pct = $('#updPct');
+    if (pct) pct.textContent = `${s.progress}%`;
+    return;
+  }
+  if (state.view === 'settings' && state.settingsTab === 'about') render();
+}
+
 function aboutPanel() {
   ensureAppInfo();
   const i = state.appInfo;
   const v = (x) => (i ? x : '…');
-  return settingsCard('ManyGameLib', 'Локальная библиотека игр для Windows',
+  return [updatesCard(), settingsCard('ManyGameLib', 'Локальная библиотека игр для Windows',
     settingRow('Версия', null, v(i && `v${i.version}`)),
     settingRow('Electron', null, v(i && i.electron)),
     settingRow('Chromium', null, v(i && i.chrome)),
     settingRow('Node.js', null, v(i && i.node)),
     settingRow('Лицензия', null, v(i && i.license)),
     settingRow('Исходный код', 'Страница проекта на GitHub',
-      h('button', { class: 'btn ghost small', type: 'button', onClick: () => openTarget('repo') }, 'Открыть на GitHub')));
+      h('button', { class: 'btn ghost small', type: 'button', onClick: () => openTarget('repo') }, 'Открыть на GitHub')))];
 }
 
 function renderSettings() {
@@ -1427,6 +1489,8 @@ $('#wMax').addEventListener('click', () => appWindow.toggleMaximize());
 $('#wClose').addEventListener('click', () => appWindow.close());
 
 window.api.onWinState(setMaximized);
+window.api.onUpdateState(onUpdateState);
+invoke('get_update_state').then((s) => { state.update = s; }).catch(() => {});
 invoke('win_state').then(setMaximized).catch(() => {});
 invoke('get_version').then((v) => { $('.brand-text small').textContent = `v${v}`; }).catch(() => {});
 window.addEventListener('focus', syncMissing);

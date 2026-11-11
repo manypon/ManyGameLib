@@ -1,10 +1,11 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, net } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
+const { createUpdater } = require('./updater');
 
 const REPO_URL = 'https://github.com/manypon/ManyGameLib';
 const LICENSE_NAME = 'MIT';
@@ -26,6 +27,7 @@ const HERO_BG = ['blur', 'banner', 'color'];
 const HERO_FIT = ['cover', 'contain'];
 
 let win = null;
+let updater = null;
 let dataDir, iconsDir, dbPath;
 let games = [];
 
@@ -198,6 +200,7 @@ const SETTINGS_DEFAULTS = {
   autostart: false,
   logging: false,
   javaPath: '',
+  checkUpdates: true,    // проверять наличие новой версии при запуске
 };
 const toInt = (v, lo, hi, fallback) => {
   const n = Math.round(Number(v));
@@ -225,6 +228,7 @@ function normalizeSettings(raw) {
     heroBackground: typeof r.heroBackground === 'boolean' ? r.heroBackground : d.heroBackground,
     autostart: typeof r.autostart === 'boolean' ? r.autostart : d.autostart,
     logging: typeof r.logging === 'boolean' ? r.logging : d.logging,
+    checkUpdates: typeof r.checkUpdates === 'boolean' ? r.checkUpdates : d.checkUpdates,
     javaPath: typeof r.javaPath === 'string' ? r.javaPath.trim().slice(0, 500) : d.javaPath,
   };
 }
@@ -273,7 +277,7 @@ function mergeSettings(patch) {
   const bg = p.background && typeof p.background === 'object' ? p.background : {};
   return normalizeSettings({
     ...settings,
-    ...Object.fromEntries(['heroBackground', 'autostart', 'logging', 'javaPath'].filter((k) => k in p).map((k) => [k, p[k]])),
+    ...Object.fromEntries(['heroBackground', 'autostart', 'logging', 'javaPath', 'checkUpdates'].filter((k) => k in p).map((k) => [k, p[k]])),
     background: {
       ...settings.background,
       ...Object.fromEntries(['mode', 'blur', 'dim'].filter((k) => k in bg).map((k) => [k, bg[k]])),
@@ -616,6 +620,12 @@ function registerHandlers() {
     packaged: app.isPackaged,
   }));
 
+  /* Обновления: состояние живёт в updater.js, интерфейс получает его командой и событием update-state. */
+  handle('get_update_state', () => updater.getState());
+  handle('check_update', () => updater.check());
+  handle('download_update', () => updater.download());
+  handle('install_update', () => { updater.install(); });
+
   /* Открывает папку данных, папку журнала или страницу проекта. Интерфейс передаёт только название цели,
      а не адрес или путь: произвольные ссылки и файлы отсюда открыть нельзя. */
   handle('open_external', async ({ target }) => {
@@ -628,6 +638,8 @@ function registerHandlers() {
       if (err) throw new Error(`Не удалось открыть папку: ${err}`);
     } else if (target === 'repo') {
       await shell.openExternal(REPO_URL);
+    } else if (target === 'release') {
+      await shell.openExternal(`${REPO_URL}/releases/latest`);
     } else {
       throw new Error('Неизвестная цель.');
     }
@@ -868,8 +880,14 @@ if (!app.requestSingleInstanceLock()) {
     try {
       if (app.isPackaged && app.getLoginItemSettings().openAtLogin !== settings.autostart) applyAutostart(settings.autostart);
     } catch { /* ignore */ }
+    updater = createUpdater({
+      app, net, repoUrl: REPO_URL, log: logLine,
+      send: (s) => { if (win && !win.isDestroyed()) win.webContents.send('update-state', s); },
+    });
     registerHandlers();
     createWindow();
+    // Тихая проверка через несколько секунд после запуска, если она не выключена в настройках.
+    if (settings.checkUpdates) win.once('ready-to-show', () => setTimeout(() => updater.check(), 4000));
     if (libraryNotice) {
       win.once('ready-to-show', () => dialog.showMessageBox(win, { type: 'warning', title: 'ManyGameLib', message: 'Библиотека восстановлена', detail: libraryNotice, buttons: ['OK'], noLink: true }));
     }
