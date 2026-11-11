@@ -195,14 +195,23 @@ async function loadAssets(id) {
 const LAUNCH_LOCK_MS = 3000;
 const launching = new Map(); // id игры -> таймер, который снимет блокировку
 
-/* Кнопки запуска игры, которая сейчас запускается, отключаем и подписываем «Запускается…». */
+function isRunning(id) {
+  const g = state.games.find((x) => x.id === id);
+  return !!(g && g.running);
+}
+
+/* Как в Steam: пока игра запускается или идёт, её кнопки отключены и подписаны
+   «Запускается…» / «Играет». Состояние «идёт» приходит из главного процесса вместе с игрой. */
 function refreshLaunchButtons() {
   document.querySelectorAll('[data-launch-id]').forEach((el) => {
-    const busy = launching.has(el.dataset.launchId);
-    el.disabled = busy;
-    el.classList.toggle('is-launching', busy);
+    const id = el.dataset.launchId;
+    const running = isRunning(id);
+    const starting = !running && launching.has(id);
+    el.disabled = running || starting;
+    el.classList.toggle('is-launching', starting);
+    el.classList.toggle('is-running', running);
     const label = el.querySelector('.btn-label');
-    if (label) label.textContent = busy ? 'Запускается…' : 'Запустить';
+    if (label) label.textContent = running ? 'Играет' : starting ? 'Запускается…' : 'Запустить';
   });
 }
 
@@ -220,12 +229,12 @@ function unlockLaunch(id) {
 
 async function launch(id) {
   const game = state.games.find((g) => g.id === id);
-  if (!game || launching.has(id)) return; // уже запускается: повторное нажатие игнорируем
+  if (!game || game.running || launching.has(id)) return; // уже идёт или запускается: повторное нажатие игнорируем
   lockLaunch(id);
   try {
     const updated = await invoke('launch_game', { id });
     upsert(updated);
-    toast(`Запускаю «${game.name}»`);
+    toast(updated.running ? `«${game.name}» запущена` : `Запускаю «${game.name}»`);
   } catch (e) {
     unlockLaunch(id); // не запустилась: даём попробовать сразу
     toast(errText(e), 'error');
@@ -1007,7 +1016,9 @@ function openMenu(e, game) {
     h('button', { class: cls, type: 'button', onClick: () => { closeMenu(); fn(); } }, icon(ic), label);
 
   m.replaceChildren(
-    item('', 'play', 'Запустить', () => launch(game.id)),
+    game.running
+      ? h('button', { class: 'is-running', type: 'button', disabled: true }, icon('play'), 'Играет')
+      : item('', 'play', 'Запустить', () => launch(game.id)),
     item('', 'star', game.favorite ? 'Убрать из избранного' : 'В избранное', () => toggleFavorite(game.id)),
     item('', 'info', 'Подробнее', () => openDetails(game.id)),
     item('', 'edit', 'Изменить', () => openEditModal(game.id)),
@@ -1164,7 +1175,8 @@ function openDetails(id) {
             title: game.favorite ? 'Убрать из избранного' : 'В избранное',
             onClick: () => { closeModal(); toggleFavorite(game.id); },
           }, icon('star')),
-          h('button', { class: 'btn primary small', type: 'button', onClick: () => { closeModal(); launch(game.id); } }, icon('play'), 'Запустить'))));
+          h('button', { class: 'btn primary small', type: 'button', 'data-launch-id': game.id, onClick: () => { closeModal(); launch(game.id); } },
+            icon('play'), h('span', { class: 'btn-label' }, 'Запустить')))));
   });
 }
 

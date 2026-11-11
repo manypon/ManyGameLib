@@ -7,11 +7,12 @@ Launching is handled entirely by the main process (`spawnGame()` in `main.js`). 
 ## What happens on `launch_game`
 
 1. Find the game; fail if the id is unknown.
-2. If this game was launched less than 3 seconds ago, return immediately without launching again (see "Repeat protection").
-3. If the file no longer exists, fail with "file not found".
-4. Mark the launch time, then start the process.
-5. On failure, clear the mark (so the user can retry at once) and report the error.
-6. On success, set `last_played` to now, save the library, start following the process for playtime (see below) and return the updated game.
+2. If the game is already running (it has a live session, see "Running state"), return its state without launching again.
+3. If this game was launched less than 3 seconds ago, return immediately without launching again (see "Repeat protection").
+4. If the file no longer exists, fail with "file not found".
+5. Mark the launch time, then start the process.
+6. On failure, clear the mark (so the user can retry at once) and report the error.
+7. On success, set `last_played` to now, save the library, start following the process for playtime (see below) and return the updated game.
 
 ## How each file type is started
 
@@ -60,6 +61,15 @@ The time spent in a game is counted automatically, in `playtime_sec`.
 - **Not counted at all:** games started through the Windows shell (`.lnk`, `.url`, `.bat`, `.cmd`, `.msi`, and an `.exe` that needed the UAC fallback), because there is no process to follow. Launchers that start the real game and quit are counted only as long as the launcher runs. For these the value can be set by hand.
 - **By hand.** The edit and add forms have a field "Наиграно, ч" (hours, decimals with a comma or a point). `add_game` and `update_game` accept `playtimeSec`: a number sets the value, `undefined`, `null` or an empty value leaves it as it is, and an invalid number is rejected ("Время в игре задано неверно."). The form sends the value only if the user touched the field, so the automatic value is not overwritten by the rounding of the displayed hours.
 - **Display.** `12,5 h` style: one decimal up to 100 hours, whole hours above, "меньше 0,1 ч" for tiny values. It is shown in the top block, in the "About" window and as the sort "По времени в игре".
+
+## Running state
+
+Like in Steam, a game that is running cannot be started again. The state is the session described in "Playtime": while the process ManyGameLib started is alive, the game view has `running: true`.
+
+- `launch_game` for a running game does nothing and returns the view.
+- The interface shows "Играет" instead of "Запустить" on the big button, turns the tile's ▶ and the list button green, disables them, and shows a disabled "Играет" item in the context menu. A double-click on the tile does nothing.
+- When the process exits (even after a session shorter than 60 seconds), the main process sends `game-updated` with `running: false` and the buttons return to normal at once.
+- **Limits.** Only the process ManyGameLib started is followed. Games started through the Windows shell (`.bat` and other types) have no process to follow and are never shown as running; the 3-second protection below still applies. If a launcher starts the real game and exits, the game counts as not running after the launcher exits. After ManyGameLib is restarted, a game that is still running is not shown as running.
 
 ## Repeat protection
 

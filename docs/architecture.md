@@ -67,7 +67,7 @@ The preload script exposes `window.api` with seven members:
 | `preview_image` | `{ path }` | Data URL for a picked file, before saving |
 | `add_game` | `{ name, exePath, args, playtimeSec, images, hero }` | The new game view |
 | `update_game` | `{ id, name, exePath, args, playtimeSec, images, hero }` | The updated game view |
-| `launch_game` | `{ id }` | The game view with the new `last_played` |
+| `launch_game` | `{ id }` | The game view with the new `last_played` and `running: true`; a game that is already running is returned as is |
 | `toggle_favorite` | `{ id }` | The updated game view |
 | `remove_game` | `{ id }` | nothing |
 | `win_state` | none | `true` if the window is maximized |

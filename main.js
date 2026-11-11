@@ -384,6 +384,7 @@ function view(g) {
     playtime_sec: playtimeOf(g),
     added_at: g.added_at,
     missing: !isFile(g.exe_path),
+    running: sessions.has(g.id),
   };
 }
 
@@ -705,6 +706,8 @@ function endSession(id) {
   if (!s) return;
   sessions.delete(id);
   addPlaytime(id, Math.round((Date.now() - s.start) / 1000));
+  const g = games.find((x) => x.id === id);
+  if (g && win && !win.isDestroyed()) win.webContents.send('game-updated', view(g)); // снять «Играет»
 }
 
 function addPlaytime(id, sec) {
@@ -896,6 +899,7 @@ function registerHandlers() {
 
   handle('launch_game', async ({ id }) => {
     const g = findGame(id);
+    if (sessions.has(id)) return view(g); // уже запущена: второй экземпляр не открываем
     const last = launchedAt.get(id);
     if (last && Date.now() - last < LAUNCH_LOCK_MS) return view(g); // игра только что запущена
     if (!isFile(g.exe_path)) throw new Error(`Файл игры не найден: ${g.exe_path}`);

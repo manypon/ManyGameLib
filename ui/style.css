@@ -437,6 +437,13 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .play-fab.is-launching { opacity: 1; transform: none; filter: saturate(0.4) brightness(0.85); cursor: progress; }
 .r-btn.play.is-launching { opacity: 0.6; cursor: progress; }
 
+/* ---------- Игра идёт: «Играет», как в Steam ---------- */
+.btn.primary.is-running, .btn.primary.is-running:hover { background: #2f9e5b; box-shadow: none; opacity: 1; cursor: default; }
+.btn.primary.is-running:disabled { opacity: 1; }
+.play-fab.is-running, .play-fab.is-running:hover { opacity: 1; transform: none; background: #2f9e5b; box-shadow: 0 8px 20px rgba(47, 158, 91, 0.45); cursor: default; }
+.r-btn.play.is-running { opacity: 1; background: #2f9e5b; color: #fff; cursor: default; }
+.menu button.is-running { color: #4cc982; cursor: default; }
+
 
 /* ---------- Страница настроек ---------- */
 .settings-sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
