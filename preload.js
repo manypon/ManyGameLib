@@ -1,6 +1,6 @@
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const COMMANDS = new Set([
   'get_version', 'get_games', 'get_missing', 'get_assets', 'preview_image',
@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('api', {
     if (res && res.error) throw res.error;
     return res ? res.data : null;
   },
+  // Путь к файлу, перетащенному в окно (у File в новых Electron свойства path больше нет).
+  pathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
   win: (action) => ipcRenderer.send('win', action),
   onUpdateState: (cb) => ipcRenderer.on('update-state', (_event, s) => cb(s)),
   onWinState: (cb) => ipcRenderer.on('win-state', (_event, maximized) => cb(!!maximized)),

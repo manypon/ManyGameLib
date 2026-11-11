@@ -1059,11 +1059,19 @@ const modalHead = (title) =>
     h('h3', {}, title),
     h('button', { class: 'x-btn', type: 'button', title: 'Закрыть', onClick: closeModal }, icon('close')));
 
-function openAddModal() {
+/* opts.exe: файл, который уже выбран (перетащили в окно).
+   opts.queue: { index, total, next }: файлов в очереди несколько, после этой игры открываем форму для следующей. */
+function openAddModal(opts) {
+  const exe = opts && typeof opts.exe === 'string' ? opts.exe : '';
+  const queue = exe && opts.queue ? opts.queue : null;
+  const more = !!queue && queue.index + 1 < queue.total;
   openModal((modal) => {
     modal.classList.add('wide');
     const form = gameForm({
       autofocus: true,
+      initialExe: exe,
+      onSkip: more ? () => { closeModal(); queue.next(); } : null,
+      skipLabel: more ? `Пропустить (осталось ещё ${queue.total - queue.index - 1})` : 'Пропустить',
       onDone: (game) => {
         closeModal();
         upsert(game);
@@ -1075,9 +1083,10 @@ function openAddModal() {
         render();
         $('#content').scrollTop = 0;
         toast(`«${game.name}» добавлена в библиотеку`);
+        if (more) queue.next();
       },
     });
-    modal.append(modalHead('Добавить игру'), form);
+    modal.append(modalHead(queue && queue.total > 1 ? `Добавить игру (${queue.index + 1} из ${queue.total})` : 'Добавить игру'), form);
     return form.isDirty;
   });
 }
@@ -1195,7 +1204,7 @@ const PICK_TITLES = {
   logo: 'Выберите логотип игры',
 };
 
-function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus = false }) {
+function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus = false, initialExe = '', onSkip = null, skipLabel = 'Пропустить' }) {
   const editing = mode === 'edit';
 
   const st = {
@@ -1259,28 +1268,32 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
           { name: 'Все файлы', extensions: ['*'] },
         ],
       });
-      if (!picked) return;
-      st.exe = picked;
-      exeInput.value = picked;
-      syncArgs();
-      syncFromFile();
-      autoIcon();
-      showError('');
-      if (!st.nameTouched || !st.name.trim()) {
-        const parts = picked.split(/[\\/]/).filter(Boolean);
-        const file = (parts.pop() || '').replace(/\.[^.]+$/, ''); // «расширение» срезаем только у файла
-        let guess = file;
-        // У exe часто общее имя (launcher, game…): тогда берём название папки игры как есть.
-        if (/^(launcher|game|start|play|run|main|app|bin|client|win64|shipping)$/i.test(file) && parts.length) {
-          guess = parts.pop();
-        }
-        st.name = guess.replace(/_+/g, ' ').trim();
-        nameInput.value = st.name;
-      }
-      updatePreview();
+      if (picked) applyExe(picked);
     } catch (e) {
       showError(errText(e));
     }
+  }
+
+  /* Файл игры выбран (диалогом или перетаскиванием): подставляем всё, что можно вывести из него. */
+  function applyExe(picked) {
+    st.exe = picked;
+    exeInput.value = picked;
+    syncArgs();
+    syncFromFile();
+    autoIcon();
+    showError('');
+    if (!st.nameTouched || !st.name.trim()) {
+      const parts = picked.split(/[\\/]/).filter(Boolean);
+      const file = (parts.pop() || '').replace(/\.[^.]+$/, ''); // «расширение» срезаем только у файла
+      let guess = file;
+      // У exe часто общее имя (launcher, game…): тогда берём название папки игры как есть.
+      if (/^(launcher|game|start|play|run|main|app|bin|client|win64|shipping)$/i.test(file) && parts.length) {
+        guess = parts.pop();
+      }
+      st.name = guess.replace(/_+/g, ' ').trim();
+      nameInput.value = st.name;
+    }
+    updatePreview();
   }
 
   /* --- Картинки --- */
@@ -1487,22 +1500,96 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       field('Логотип вместо названия', logoRow.row),
       field('Обложка справа', h('div', { class: 'inline' }, artCheck.node, fitSeg.node))),
     error,
-    submitBtn);
+    submitBtn,
+    ...(onSkip ? [h('button', { class: 'btn ghost wide', type: 'button', onClick: onSkip }, skipLabel)] : []));
 
   // Есть ли несохранённые данные (для защиты от случайного закрытия окна).
   const snap = () => JSON.stringify([
     st.name.trim(), st.exe, st.hero,
-    Object.values(st.img).map((v) => [v.mode, v.path]),
+    Object.values(st.img).map((v) => [v.mode === 'exe' && !st.iconTouched ? 'keep' : v.mode, v.path]), // автоиконку не считаем правкой
   ]);
-  const initial = snap();
+  let initial = snap();
   form.isDirty = () => !st.busy && snap() !== initial;
 
   syncImages();
   syncFromFile();
   syncHero();
   updatePreview();
-  if (autofocus) setTimeout(() => exeInput.focus(), 60);
+  if (initialExe) { applyExe(initialExe); initial = snap(); }   // файл пришёл перетаскиванием: это не правка пользователя
+  if (autofocus) setTimeout(() => (initialExe ? nameInput : exeInput).focus(), 60);
   return form;
+}
+
+/* ---------- Перетаскивание файлов в окно ---------- */
+
+const DROP_TYPES = ['exe', 'jar', 'bat', 'cmd', 'lnk', 'url', 'com', 'msi'];
+const DROP_MAX = 25;   // больше за раз не берём: каждому файлу открывается своя форма
+const pathKeyUi = (p) => String(p).replace(/\//g, '\\').toLowerCase();
+
+const dropOverlay = h('div', { class: 'drop-overlay', hidden: true },
+  h('div', { class: 'drop-card' },
+    h('div', { class: 'drop-title' }, 'Отпустите, чтобы добавить игру'),
+    h('div', { class: 'drop-sub' }, 'Файлы .exe, .jar, .lnk и другие')));
+document.body.append(dropOverlay);
+
+let dragDepth = 0;
+const dragHasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+
+window.addEventListener('dragenter', (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  dragDepth += 1;
+  dropOverlay.hidden = false;
+});
+window.addEventListener('dragover', (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();   // без этого окно попыталось бы открыть файл как страницу
+  e.dataTransfer.dropEffect = 'copy';
+});
+window.addEventListener('dragleave', (e) => {
+  if (!dragHasFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) dropOverlay.hidden = true;
+});
+window.addEventListener('drop', (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  dropOverlay.hidden = true;
+  handleDrop(Array.from(e.dataTransfer.files));
+});
+
+function handleDrop(files) {
+  if (document.querySelector('#overlay .backdrop')) {
+    toast('Сначала закройте открытое окно, затем перетащите файлы ещё раз.');
+    return;
+  }
+  const have = new Set(state.games.map((g) => pathKeyUi(g.exe_path)));
+  const queue = [];
+  let unsupported = 0;
+  const dups = [];
+  for (const f of files) {
+    const p = window.api.pathForFile(f);
+    const ext = (p.split('.').pop() || '').toLowerCase();
+    if (!p || !DROP_TYPES.includes(ext) || /[\\/]$/.test(p)) { unsupported += 1; continue; }
+    const key = pathKeyUi(p);
+    if (have.has(key)) { dups.push(p.split(/[\\/]/).pop()); continue; }
+    have.add(key);   // один и тот же файл дважды в одной пачке
+    queue.push(p);
+  }
+  const notes = [];
+  if (dups.length) notes.push(dups.length === 1 ? `«${dups[0]}» уже в библиотеке` : `уже в библиотеке: ${dups.length}`);
+  if (unsupported) notes.push(`не подходит по типу: ${unsupported}`);
+  if (queue.length > DROP_MAX) { notes.push(`взяты первые ${DROP_MAX}`); queue.length = DROP_MAX; }
+  if (!queue.length) {
+    toast(notes.length ? `Нечего добавлять (${notes.join(', ')}).${unsupported ? ' Подходят .exe, .jar, .lnk, .url, .bat, .cmd, .com, .msi.' : ''}` : 'Нечего добавлять.');
+    return;
+  }
+  if (notes.length) toast(`Пропущено: ${notes.join(', ')}`);
+  const next = (i) => {
+    if (i < queue.length) openAddModal({ exe: queue[i], queue: { index: i, total: queue.length, next: () => next(i + 1) } });
+  };
+  next(0);
 }
 
 /* ---------- Окно: кнопки и состояние ---------- */

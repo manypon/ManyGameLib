@@ -493,6 +493,11 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .s-buttons { display: flex; gap: 8px; }
 .s-slider { display: flex; align-items: center; gap: 14px; }
 .s-range { width: 200px; accent-color: var(--accent); cursor: pointer; }
+.drop-overlay { position: fixed; inset: 12px; z-index: 200; display: flex; align-items: center; justify-content: center; border: 2px dashed var(--accent); border-radius: 20px; background: rgba(10, 10, 20, 0.78); backdrop-filter: blur(4px); pointer-events: none; }
+.drop-overlay[hidden] { display: none; }
+.drop-card { text-align: center; }
+.drop-title { font-size: 22px; font-weight: 700; }
+.drop-sub { margin-top: 6px; color: var(--muted); font-size: 14px; }
 .s-progress-wrap { display: flex; align-items: center; gap: 10px; }
 .s-progress { width: 180px; height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .s-progress > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }

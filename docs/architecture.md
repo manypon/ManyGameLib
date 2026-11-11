@@ -42,7 +42,7 @@ The page cannot read or write arbitrary files. File paths for games and images c
 
 ## The IPC contract
 
-The preload script exposes `window.api` with five members:
+The preload script exposes `window.api` with six members:
 
 | Member | Direction | Purpose |
 |--------|-----------|---------|
@@ -51,6 +51,7 @@ The preload script exposes `window.api` with five members:
 | `win(action)` | page → main, one-way | `minimize`, `toggleMaximize`, `close` for the custom title bar |
 | `onWinState(cb)` | main → page | Tells the page when the window is maximized/restored, so it can draw the right button |
 | `onUpdateState(cb)` | main → page | Pushes the update state (checking, downloading, ready…) |
+| `pathForFile(file)` | page → preload | The path of a file dropped into the window (`webUtils.getPathForFile`) |
 
 ### Commands
 

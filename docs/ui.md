@@ -74,6 +74,17 @@ Every launch button carries `data-launch-id`. `refreshLaunchButtons()` runs afte
 - **Toasts** show short results and errors.
 - **Deleting a game** asks for confirmation, and removes only the library entry.
 
+## Dropping files into the window
+
+A file dragged from Explorer into the window starts adding a game.
+
+- **Overlay.** While a file is dragged over the window, a dashed frame with "Отпустите, чтобы добавить игру" appears (`dragenter`/`dragleave` with a depth counter, because these events also fire for child elements). Only drags that contain files are handled.
+- **`preventDefault` on `dragover` and `drop` is required.** Without it the window would try to open the dropped file as a page. (The main process also blocks navigation as a second line of defence.)
+- **Path of a file.** Modern Electron removed `File.path`, so the preload script exposes `window.api.pathForFile(file)` (`webUtils.getPathForFile`).
+- **Filtering (`handleDrop`).** Kept: `.exe`, `.jar`, `.bat`, `.cmd`, `.lnk`, `.url`, `.com`, `.msi`. Skipped with a short notice: other types, folders, files that are already in the library (compared case-insensitively) and repeats inside the same drop. At most 25 files are taken. If a window is open, the drop is refused with a notice.
+- **A queue of forms.** The first file opens the usual add form with the path, the name, the arguments field and the automatic icon already filled in ([Images](images.md)). The title shows "(2 из 5)". After "Добавить игру" the form for the next file opens. "Пропустить" skips one file; the × button, Escape or a click outside the window ends the whole queue.
+- An unmodified prefilled form does not ask for confirmation when closed, because nothing was typed by the user.
+
 ## Settings page and app background
 
 The Settings page is one more value of `view`, drawn by `renderSettings()` with four tabs. A layer behind the interface (`#appBg`) shows the app background, and `applyBackground()` updates it. Sliders change only the style while dragging and save once on release, so there is no re-render and no write per pixel. `body.has-bg` and `body.hero-flat` switch the look of the sidebar, the cards and the top block. All of this is described in [Settings](settings.md).
