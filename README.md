@@ -40,8 +40,9 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Launch arguments** per game (for `.exe`, `.com` and `.jar`), for example `-windowed -nolauncher`.
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
-- **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu.
-- **Settings page:** an app background (a bundled picture, your own or none) with blur and dimming sliders, an option to turn off the top block card, autostart with Windows, an optional log file, and a custom Java path for `.jar` files.
+- **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu. While a game is running, its button shows "Играет" and it cannot be started a second time.
+- **Tray:** the window's cross asks whether to hide the app to the tray or quit (with a "remember" checkbox, changeable in Settings). Autostart can open the app straight into the tray.
+- **Settings page:** an app background (a bundled picture, your own or none) with blur and dimming sliders, an option to turn off the top block card, autostart with Windows, an optional log file, and a custom Java path for `.jar` files. The app background can be an animated GIF (up to 40 MB).
 - **Updates:** the app checks GitHub for a newer version (can be turned off in Settings). With the installer it downloads and installs the update on your button; the portable folder only points you to the release page.
 - Supported files: `.exe`, `.jar` (runs through Java, which must be installed; the app looks for `javaw` in PATH, `JAVA_HOME`, the Windows registry and the usual Program Files folders), `.lnk` and `.url` shortcuts, plus `.bat`, `.cmd` and `.msi`. Any other file opens with the program Windows has assigned to it.
 - Games start in their own folder. If a game needs administrator rights, Windows shows the UAC prompt.
@@ -60,7 +61,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - If `games.json` is corrupted, it is renamed to `games.corrupt-<date>.json` (never overwritten) and the last good copy is restored automatically, with a notice.
 - If the file is locked by another program, the app offers "Retry" or "Exit" instead of starting with an empty library.
 
-To move your library to another computer, copy that whole folder. Game paths are absolute, so the games need to be at the same paths there.
+To move your library to another computer, use **Settings → Library → Export / Import** (a ZIP with the games and their images; import adds games and skips the ones already there), or copy that whole folder. Game paths are absolute, so the games need to be at the same paths there.
 
 If you used the earlier GameLib version (data in `%APPDATA%\gamelib`), the library is copied to the new location automatically on first launch. The old folder is left untouched.
 
