@@ -27,7 +27,7 @@ npm run build
 
 Результат: установщик `dist\ManyGameLib-Setup-<версия>.exe` и портативная папка `dist\win-unpacked\ManyGameLib.exe`. Папку `win-unpacked` можно переносить целиком, Node.js для её запуска не нужен.
 
-Если Electron не скачивается (ошибка 504 или сетевая), можно собрать вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а в `resources\app` положите `main.js`, `preload.js`, `updater.js`, `package.json`, `ui` и `build`.
+Если Electron не скачивается (ошибка 504 или сетевая), можно собрать вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а в `resources\app` положите `main.js`, `preload.js`, `updater.js`, `zip.js`, `package.json`, `ui` и `build`.
 
 ## Как это работает
 
@@ -77,6 +77,7 @@ manygamelib/
 ├─ main.js        хранение игр, запуск процессов, диалоги выбора файлов
 ├─ preload.js     безопасный мост между интерфейсом и main.js
 ├─ updater.js     проверка, скачивание и установка обновлений
+├─ zip.js         чтение и запись ZIP для экспорта и импорта библиотеки
 ├─ ui/            интерфейс (index.html, style.css, app.js, assets/)
 ├─ build/         иконки приложения
 ├─ docs/          техническая документация

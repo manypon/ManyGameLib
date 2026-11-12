@@ -740,6 +740,30 @@ function generalPanel() {
   ];
 }
 
+let transferBusy = false;
+
+/* Экспорт и импорт: окна выбора файла открывает главный процесс, страница путей не задаёт. */
+async function transfer(kind) {
+  if (transferBusy) return;
+  transferBusy = true;
+  if (state.view === 'settings') render();
+  try {
+    const res = await invoke(kind === 'export' ? 'export_library' : 'import_library');
+    if (res && kind === 'export') {
+      toast(`Сохранено игр: ${res.count}`);
+    } else if (res) {
+      let text = res.added || res.skipped ? `Добавлено ${res.added}, пропущено ${res.skipped}` : 'В архиве нет игр';
+      if (res.imagesLost) text += `. Картинок не удалось перенести: ${res.imagesLost}`;
+      toast(text);
+      state.games = await invoke('get_games');
+    }
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+  transferBusy = false;
+  render();
+}
+
 function libraryPanel() {
   ensureAppInfo();
   const total = state.games.length;
@@ -760,6 +784,11 @@ function libraryPanel() {
         h('div', { class: 's-buttons' },
           h('button', { class: 'btn ghost small', type: 'button', onClick: pickJava }, 'Выбрать…'),
           state.settings && state.settings.javaPath && h('button', { class: 'btn ghost small', type: 'button', onClick: clearJava }, 'Сбросить')))),
+    settingsCard('Перенос библиотеки', 'Сохранить игры в ZIP-архив и добавить их на другом компьютере',
+      settingRow('Экспорт', 'Список игр, время в играх и все картинки в одном архиве',
+        h('button', { class: 'btn ghost small', type: 'button', disabled: transferBusy || !total, onClick: () => transfer('export') }, icon('folder'), 'Экспортировать…')),
+      settingRow('Импорт', 'Игры из архива добавляются к вашим, игры с тем же путём к файлу пропускаются. Открывайте только архивы, которым доверяете',
+        h('button', { class: 'btn ghost small', type: 'button', disabled: transferBusy, onClick: () => transfer('import') }, icon('folder'), 'Импортировать…'))),
     settingsCard('Защита данных', 'Список игр хранится безопасно',
       settingRow('Предыдущая версия списка', 'Файл games.json.bak, обновляется при каждом сохранении', null),
       settingRow('Копии за запуски', 'Папка backups: по одной копии за запуск, последние 5', null),

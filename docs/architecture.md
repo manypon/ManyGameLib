@@ -20,6 +20,7 @@ ManyGameLib is a small Electron app with three parts and one runtime dependency 
 | File | Process | Responsibility |
 |------|---------|----------------|
 | `updater.js` | main | Update check, download and install (loaded by `main.js`) |
+| `zip.js` | main | Reading and writing ZIP for library export and import (loaded by `main.js`, see [Moving the library](transfer.md)) |
 | `main.js` | main | Library storage, backups, settings, logging, autostart, image copies, launching games, native dialogs, the window, the tray icon |
 | `preload.js` | preload (isolated) | Exposes `window.api` to the page with a fixed set of commands |
 | `ui/index.html`, `ui/style.css`, `ui/app.js` | renderer | Everything the user sees. No file or process access |
@@ -77,6 +78,8 @@ The preload script exposes `window.api` with seven members:
 | `set_wallpaper` | `{ path }` | The settings, with the user's own app background |
 | `clear_wallpaper` | none | The settings, with the own background removed |
 | `get_wallpaper` | none | The own background as a data URL, or `null` |
+| `export_library` | none | `{ count, path }` after saving a ZIP, or `null` if the window was cancelled (see [Moving the library](transfer.md)) |
+| `import_library` | none | `{ added, skipped, imagesLost }`, or `null` if cancelled |
 | `get_update_state` | none | The update state |
 | `check_update` | none | The state after a check |
 | `download_update` | none | The state (`downloading`) |

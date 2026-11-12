@@ -27,6 +27,7 @@
       "main.js",
       "preload.js",
       "updater.js",
+      "zip.js",
       "ui/**/*",
       "build/**/*",
       "!build/afterPack.js"

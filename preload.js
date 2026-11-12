@@ -7,7 +7,7 @@ const COMMANDS = new Set([
   'add_game', 'update_game', 'launch_game', 'toggle_favorite', 'remove_game',
   'win_state', 'get_settings', 'save_settings', 'reset_settings',
   'get_app_info', 'open_external', 'get_update_state', 'file_icon', 'check_update', 'download_update', 'install_update',
-  'get_wallpaper', 'set_wallpaper', 'clear_wallpaper',
+  'get_wallpaper', 'set_wallpaper', 'clear_wallpaper', 'export_library', 'import_library',
 ]);
 
 contextBridge.exposeInMainWorld('api', {

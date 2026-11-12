@@ -1,6 +1,7 @@
 'use strict';
 
 const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeImage, Tray, Menu } = require('electron');
+const { writeZip, readZip } = require('./zip');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -734,6 +735,125 @@ function addPlaytime(id, sec) {
   if (win && !win.isDestroyed()) win.webContents.send('game-updated', view(g));
 }
 
+/* ---------- Перенос библиотеки: экспорт и импорт ZIP ---------- */
+
+/* Архив: manifest.json (кто и когда создал), games.json (список игр) и icons/ (картинки).
+   Пути к картинкам в games.json относительные (icons/…), при импорте картинки получают новые имена. */
+const EXPORT_FORMAT = 1;
+const ZIP_MAX_BYTES = 1024 * 1024 * 1024;   // сам архив при импорте
+const ZIP_META_MAX = 32 * 1024 * 1024;      // manifest.json и games.json
+const ZIP_LIMITS = { maxEntries: 20000, maxEntrySize: ZIP_META_MAX, maxTotal: 2 * 1024 * 1024 * 1024 };
+const ZIP_IMAGE_RE = /^icons\/[A-Za-z0-9._-]{1,120}$/;
+
+function buildExport() {
+  const entries = [];
+  const out = [];
+  games.forEach((g, i) => {
+    const rec = {
+      name: g.name,
+      exe_path: g.exe_path,
+      args: cleanArgs(g.args),
+      hero: normalizeHero(g.hero),
+      favorite: !!g.favorite,
+      last_played: g.last_played ?? null,
+      playtime_sec: playtimeOf(g),
+      added_at: g.added_at,
+    };
+    for (const [kind, field] of Object.entries(IMAGE_FIELDS)) {
+      rec[field] = null;
+      const file = g[field];
+      const ext = extOf(file);
+      if (!file || !IMAGE_EXTS.includes(ext) || path.basename(file) !== file) continue;
+      try {
+        const full = path.join(iconsDir, file);
+        if (fs.statSync(full).size > MAX_IMAGE_BYTES) continue;
+        const name = `icons/${i}-${kind}.${ext}`;
+        entries.push({ name, data: fs.readFileSync(full) });
+        rec[field] = name;
+      } catch { /* картинки нет на диске: игра уезжает без неё */ }
+    }
+    out.push(rec);
+  });
+  const manifest = { app: 'ManyGameLib', format: EXPORT_FORMAT, version: app.getVersion(), exported_at: new Date().toISOString(), games: out.length };
+  return writeZip([
+    { name: 'manifest.json', data: Buffer.from(JSON.stringify(manifest, null, 2)) },
+    { name: 'games.json', data: Buffer.from(JSON.stringify(out, null, 2)) },
+    ...entries,
+  ]);
+}
+
+/* Разбирает архив и добавляет игры, которых ещё нет (сравнение по пути к файлу). Ничего не удаляет и не меняет у существующих.
+   Возвращает { added, skipped, imagesLost }. Если сохранить не вышло, созданные картинки удаляются. */
+function mergeImport(buf) {
+  let zip;
+  try { zip = readZip(buf, ZIP_LIMITS); }
+  catch (e) { throw new Error(`Не удалось прочитать архив: ${e.message}.`); }
+  const byName = new Map(zip.map((z) => [z.name, z]));
+  const meta = (name) => {
+    const z = byName.get(name);
+    if (!z) throw new Error(`Это не архив ManyGameLib: в нём нет ${name}.`);
+    if (z.size > ZIP_META_MAX) throw new Error(`Файл ${name} в архиве слишком велик.`);
+    try { return JSON.parse(z.read().toString('utf8').replace(/^﻿/, '')); }
+    catch (e) { throw new Error(`Не удалось прочитать ${name}: ${e.message}.`); }
+  };
+  const manifest = meta('manifest.json');
+  if (!manifest || manifest.app !== 'ManyGameLib') throw new Error('Это не архив ManyGameLib.');
+  if (!Number.isInteger(manifest.format) || manifest.format < 1) throw new Error('Не удалось определить формат архива.');
+  if (manifest.format > EXPORT_FORMAT) throw new Error('Архив создан более новой версией ManyGameLib. Обновите приложение.');
+  const list = meta('games.json');
+  if (!Array.isArray(list)) throw new Error('Список игр в архиве записан неверно.');
+
+  const seen = new Set(games.map((g) => pathKey(g.exe_path)));
+  const usedIds = new Set(games.map((g) => g.id));
+  let nextId = Date.now();
+  const created = [];
+  const added = [];
+  let skipped = 0;
+  let imagesLost = 0;
+  try {
+    for (const rec of list) {
+      if (!rec || typeof rec !== 'object') { skipped++; continue; }
+      let name;
+      try { name = cleanName(rec.name); } catch { skipped++; continue; }
+      const exe = typeof rec.exe_path === 'string' ? rec.exe_path.trim() : '';
+      if (!exe || exe.length > 1000 || /[\u0000-\u001f]/.test(exe)) { skipped++; continue; }
+      const key = pathKey(exe);
+      if (seen.has(key)) { skipped++; continue; }
+      seen.add(key);
+
+      while (usedIds.has(String(nextId))) nextId += 1;
+      const id = String(nextId);
+      usedIds.add(id);
+
+      const fields = {};
+      for (const [kind, field] of Object.entries(IMAGE_FIELDS)) {
+        fields[field] = null;
+        const ref = rec[field];
+        if (ref == null) continue;
+        const entry = typeof ref === 'string' && ZIP_IMAGE_RE.test(ref) ? byName.get(ref) : null;
+        const ext = extOf(ref);
+        if (!entry || !IMAGE_EXTS.includes(ext) || entry.size > MAX_IMAGE_BYTES) { imagesLost++; continue; }
+        try {
+          const file = `${id}-${kind}-${Date.now().toString(36)}.${ext}`;
+          fs.writeFileSync(path.join(iconsDir, file), entry.read());
+          created.push(file);
+          fields[field] = file;
+        } catch { imagesLost++; }
+      }
+      const num = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 && v !== null && v !== '' ? Math.floor(Number(v)) : null);
+      added.push({
+        id, name, exe_path: exe, args: cleanArgs(rec.args), playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero),
+        favorite: rec.favorite === true, last_played: num(rec.last_played), added_at: num(rec.added_at) ?? Date.now(),
+      });
+    }
+    if (added.length) commit([...games, ...added]);
+  } catch (e) {
+    created.forEach(removeImage);
+    throw e;
+  }
+  return { added: added.length, skipped, imagesLost };
+}
+
 /* ---------- Команды для интерфейса ---------- */
 
 function handle(channel, fn) {
@@ -830,6 +950,58 @@ function registerHandlers() {
     afterSettingsChange(prev, settings);
     logLine('info', 'настройки сброшены');
     return settings;
+  });
+
+  /* Экспорт: окно «Сохранить как», ZIP пишется через временный файл. Путь выбирает пользователь, страница его не задаёт. */
+  handle('export_library', async () => {
+    if (!games.length) throw new Error('В библиотеке пока нет игр.');
+    const day = new Date().toISOString().slice(0, 10);
+    let defaultPath = `ManyGameLib-${day}.zip`;
+    try { defaultPath = path.join(app.getPath('documents'), defaultPath); } catch { /* без папки по умолчанию */ }
+    const res = await dialog.showSaveDialog(win, {
+      title: 'Сохранить библиотеку',
+      defaultPath,
+      filters: [{ name: 'Архив ZIP', extensions: ['zip'] }],
+    });
+    if (res.canceled || !res.filePath) return null;
+    const target = /\.zip$/i.test(res.filePath) ? res.filePath : `${res.filePath}.zip`;
+    const buf = buildExport();
+    const tmp = `${target}.tmp`;
+    try {
+      fs.writeFileSync(tmp, buf);
+      withRetry(() => fs.renameSync(tmp, target));
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+      throw new Error(`Не удалось сохранить архив: ${e.message}`);
+    }
+    logLine('info', `экспорт: ${games.length} игр в ${target}`);
+    return { count: games.length, path: target };
+  });
+
+  /* Импорт: окно «Открыть», игры добавляются к существующим, дубликаты (тот же путь к файлу) пропускаются. */
+  handle('import_library', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      title: 'Открыть архив библиотеки',
+      filters: [{ name: 'Архив ZIP', extensions: ['zip'] }, { name: 'Все файлы', extensions: ['*'] }],
+      properties: ['openFile'],
+    });
+    if (res.canceled || !res.filePaths.length) return null;
+    const file = res.filePaths[0];
+    let buf;
+    try {
+      if (fs.statSync(file).size > ZIP_MAX_BYTES) throw new Error('файл больше 1 ГБ');
+      buf = fs.readFileSync(file);
+    } catch (e) {
+      throw new Error(`Не удалось открыть архив: ${e.message}`);
+    }
+    // Перед изменением списка кладём копию текущего файла рядом с остальными копиями.
+    try {
+      fs.mkdirSync(backupsDir, { recursive: true });
+      if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, path.join(backupsDir, `games-${stamp()}-before-import.json`));
+    } catch { /* копия не критична */ }
+    const result = mergeImport(buf);
+    logLine('info', `импорт: добавлено ${result.added}, пропущено ${result.skipped}, без картинки ${result.imagesLost} (${file})`);
+    return result;
   });
 
   handle('get_games', () => games.map(view));

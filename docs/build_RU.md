@@ -40,7 +40,7 @@ npm run build      # выполняет: electron-builder
 | Параметр | Значение | Зачем |
 |----------|----------|-------|
 | `appId` / `productName` | `com.manygamelib.app` / `ManyGameLib` | Идентификатор и имя exe |
-| `files` | `main.js`, `preload.js`, `updater.js`, `ui/**/*`, `build/**/*` (без `build/afterPack.js`) | В пакет попадает только то, что нужно приложению |
+| `files` | `main.js`, `preload.js`, `updater.js`, `zip.js`, `ui/**/*`, `build/**/*` (без `build/afterPack.js`) | В пакет попадает только то, что нужно приложению |
 | `afterPack` | `build/afterPack.js` | Вписывает иконку и сведения о версии в exe (см. ниже) |
 | `publish` | GitHub, `manypon/ManyGameLib` | Заставляет electron-builder писать `latest.yml` и `app-update.yml` для обновлятора; сама сборка ничего не публикует |
 | `electronDist` | `node_modules/electron/dist` | Использовать Electron, уже установленный `npm install`, а не скачивать его заново во время сборки |
@@ -62,7 +62,7 @@ npm run build      # выполняет: electron-builder
 
 ### Если Electron не скачивается
 
-`npm install` скачивает Electron с GitHub. Если не вышло (например, ошибка 504), можно собрать приложение вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а `main.js`, `preload.js`, `updater.js`, `package.json`, `ui` и `build` положите в `resources\app`.
+`npm install` скачивает Electron с GitHub. Если не вышло (например, ошибка 504), можно собрать приложение вручную из уже имеющегося Electron: скопируйте его папку `dist` как `ManyGameLib`, переименуйте `electron.exe` в `ManyGameLib.exe`, а `main.js`, `preload.js`, `updater.js`, `zip.js`, `package.json`, `ui` и `build` положите в `resources\app`.
 
 ## Версии и коммиты
 
