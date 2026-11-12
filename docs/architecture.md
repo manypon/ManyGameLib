@@ -20,7 +20,7 @@ ManyGameLib is a small Electron app with three parts and one runtime dependency 
 | File | Process | Responsibility |
 |------|---------|----------------|
 | `updater.js` | main | Update check, download and install (loaded by `main.js`) |
-| `main.js` | main | Library storage, backups, settings, logging, autostart, image copies, launching games, native dialogs, the window |
+| `main.js` | main | Library storage, backups, settings, logging, autostart, image copies, launching games, native dialogs, the window, the tray icon |
 | `preload.js` | preload (isolated) | Exposes `window.api` to the page with a fixed set of commands |
 | `ui/index.html`, `ui/style.css`, `ui/app.js` | renderer | Everything the user sees. No file or process access |
 

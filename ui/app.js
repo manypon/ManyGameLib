@@ -715,7 +715,16 @@ function generalPanel() {
   const rows = [
     settingRow('Запускать при старте системы',
       packaged ? 'ManyGameLib откроется сам после входа в Windows' : 'Работает только в собранном приложении, не при запуске через npm start',
-      toggle(st.autostart && packaged, (on) => { st.autostart = on; saveSettingsPatch({ autostart: on }); }, !packaged)),
+      toggle(st.autostart && packaged, (on) => { st.autostart = on; render(); saveSettingsPatch({ autostart: on }); }, !packaged)),
+    settingRow('Крестик окна', 'Что делать при закрытии окна. В трее приложение работает в фоне, открыть его можно значком возле часов',
+      segmented(
+        [['ask', 'Спрашивать'], ['tray', 'В трей'], ['quit', 'Закрывать']],
+        () => st.closeAction,
+        (v) => { st.closeAction = v; saveSettingsPatch({ closeAction: v }); },
+      ).node),
+    settingRow('Открываться в трее',
+      packaged ? 'При запуске вместе с Windows окно не показывается, приложение ждёт в трее' : 'Работает только в собранном приложении, не при запуске через npm start',
+      toggle(st.startMinimized && packaged, (on) => { st.startMinimized = on; saveSettingsPatch({ startMinimized: on }); }, !packaged || !st.autostart)),
     settingRow('Вести журнал', 'Запуски игр и ошибки записываются в файл logs\\manygamelib.log',
       toggle(st.logging, (on) => { st.logging = on; render(); saveSettingsPatch({ logging: on }); })),
   ];
@@ -1698,6 +1707,8 @@ invoke('get_update_state').then((s) => { state.update = s; }).catch(() => {});
 invoke('win_state').then(setMaximized).catch(() => {});
 invoke('get_version').then((v) => { $('.brand-text small').textContent = `v${v}`; }).catch(() => {});
 window.addEventListener('focus', syncMissing);
+// Выбор в диалоге закрытия («Запомнить выбор») меняет настройку в фоне: подтянем её, если открыты настройки.
+window.addEventListener('focus', () => { if (state.view === 'settings') loadSettings(); });
 
 refresh();
 loadSettings();

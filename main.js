@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeImage, Tray, Menu } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -201,7 +201,10 @@ const SETTINGS_DEFAULTS = {
   logging: false,
   javaPath: '',
   checkUpdates: true,    // проверять наличие новой версии при запуске
+  closeAction: 'ask',    // что делает крестик окна: ask (спросить), tray (в трей), quit (закрыть)
+  startMinimized: false, // при автозапуске Windows открываться сразу в трее
 };
+const CLOSE_ACTIONS = ['ask', 'tray', 'quit'];
 const toInt = (v, lo, hi, fallback) => {
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
@@ -229,6 +232,8 @@ function normalizeSettings(raw) {
     autostart: typeof r.autostart === 'boolean' ? r.autostart : d.autostart,
     logging: typeof r.logging === 'boolean' ? r.logging : d.logging,
     checkUpdates: typeof r.checkUpdates === 'boolean' ? r.checkUpdates : d.checkUpdates,
+    closeAction: CLOSE_ACTIONS.includes(r.closeAction) ? r.closeAction : d.closeAction,
+    startMinimized: typeof r.startMinimized === 'boolean' ? r.startMinimized : d.startMinimized,
     javaPath: typeof r.javaPath === 'string' ? r.javaPath.trim().slice(0, 500) : d.javaPath,
   };
 }
@@ -277,7 +282,7 @@ function mergeSettings(patch) {
   const bg = p.background && typeof p.background === 'object' ? p.background : {};
   return normalizeSettings({
     ...settings,
-    ...Object.fromEntries(['heroBackground', 'autostart', 'logging', 'javaPath', 'checkUpdates'].filter((k) => k in p).map((k) => [k, p[k]])),
+    ...Object.fromEntries(['heroBackground', 'autostart', 'logging', 'javaPath', 'checkUpdates', 'closeAction', 'startMinimized'].filter((k) => k in p).map((k) => [k, p[k]])),
     background: {
       ...settings.background,
       ...Object.fromEntries(['mode', 'blur', 'dim'].filter((k) => k in bg).map((k) => [k, bg[k]])),
@@ -308,9 +313,11 @@ function logLine(level, msg) {
 
 /* Автозапуск прописываем только в собранном приложении: в режиме разработки
    в автозапуск попал бы electron.exe, а не ManyGameLib. */
+const HIDDEN_FLAG = '--hidden'; // автозапуск передаёт его, чтобы можно было открыться сразу в трее
+
 function applyAutostart(enabled) {
   if (!app.isPackaged) return;
-  try { app.setLoginItemSettings({ openAtLogin: !!enabled }); }
+  try { app.setLoginItemSettings({ openAtLogin: !!enabled, args: [HIDDEN_FLAG] }); }
   catch (e) { logLine('error', `автозапуск: ${e.message}`); }
 }
 
@@ -955,7 +962,93 @@ function registerHandlers() {
 
 /* ---------- Окно ---------- */
 
-function createWindow() {
+/* ---------- Трей ---------- */
+
+let tray = null;
+let quitting = false;   // true, когда приложение действительно выходит: тогда крестик окно не прячет
+let asking = false;     // диалог «что делать при закрытии» уже открыт
+
+function showWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (tray) { tray.destroy(); tray = null; }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+/* Прячет окно и ставит значок возле часов. Если значок создать не вышло, окно прятать нельзя: вернуть его будет нечем. */
+function hideToTray() {
+  if (!win || win.isDestroyed()) return false;
+  if (!tray) {
+    try {
+      const img = nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 16, height: 16 });
+      tray = new Tray(img);
+      tray.setToolTip('ManyGameLib');
+      tray.on('click', showWindow);
+      tray.setContextMenu(Menu.buildFromTemplate([
+        { label: 'Открыть ManyGameLib', click: showWindow },
+        { type: 'separator' },
+        { label: 'Выйти', click: () => app.quit() },
+      ]));
+    } catch (e) {
+      logLine('error', `трей: ${e.message}`);
+      if (tray) { try { tray.destroy(); } catch { /* ignore */ } }
+      tray = null;
+      return false;
+    }
+  }
+  win.hide();
+  logLine('info', 'окно свёрнуто в трей');
+  return true;
+}
+
+function quitApp() {
+  quitting = true;
+  app.quit();
+}
+
+function closeTo(action) {
+  if (action === 'tray' && hideToTray()) return;
+  quitApp();
+}
+
+/* Крестик окна. quit: закрываем; tray: прячем; ask: спрашиваем (один раз, если нажали ещё). */
+async function askClose() {
+  if (asking) return;
+  asking = true;
+  try {
+    const r = await dialog.showMessageBox(win, {
+      type: 'question',
+      title: 'ManyGameLib',
+      message: 'Что сделать при закрытии окна?',
+      detail: 'В трее приложение продолжит работать, а считать время в играх и открыться снова можно значком возле часов.',
+      buttons: ['Свернуть в трей', 'Закрыть', 'Отмена'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+      checkboxLabel: 'Запомнить выбор',
+      checkboxChecked: false,
+    });
+    if (r.response === 2) return;
+    const action = r.response === 0 ? 'tray' : 'quit';
+    if (r.checkboxChecked) {
+      try { saveSettings(normalizeSettings({ ...settings, closeAction: action })); }
+      catch (e) { logLine('error', e.message); }
+    }
+    closeTo(action);
+  } finally {
+    asking = false;
+  }
+}
+
+function onCloseRequest(e) {
+  if (quitting || settings.closeAction === 'quit') return; // окно закроется, приложение выйдет
+  e.preventDefault();
+  if (settings.closeAction === 'tray') closeTo('tray');
+  else askClose();
+}
+
+function createWindow(startHidden = false) {
   win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -977,7 +1070,9 @@ function createWindow() {
   // Страница не должна уходить на другие адреса и открывать новые окна: ссылки открывает только main.js.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => { if (!startHidden) win.show(); });
+  win.on('close', onCloseRequest);
+  win.on('session-end', () => { quitting = true; }); // выключение Windows не должно упираться в нашу «спрятать в трей»
 
   // Интерфейс рисует свою кнопку «развернуть/восстановить», ему нужно знать состояние окна.
   const sendState = () => {
@@ -994,7 +1089,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+    showWindow();
   });
 
   app.whenReady().then(() => {
@@ -1030,14 +1125,17 @@ if (!app.requestSingleInstanceLock()) {
     if (libraryNotice) logLine('warn', libraryNotice.replace(/\n/g, ' '));
     // Приводим автозапуск в соответствие с настройкой (если его убрали или добавили снаружи).
     try {
-      if (app.isPackaged && app.getLoginItemSettings().openAtLogin !== settings.autostart) applyAutostart(settings.autostart);
+      if (app.isPackaged && app.getLoginItemSettings({ args: [HIDDEN_FLAG] }).openAtLogin !== settings.autostart) applyAutostart(settings.autostart);
     } catch { /* ignore */ }
     updater = createUpdater({
       app, net, repoUrl: REPO_URL, log: logLine,
       send: (s) => { if (win && !win.isDestroyed()) win.webContents.send('update-state', s); },
     });
     registerHandlers();
-    createWindow();
+    // Автозапуск с включённой настройкой открывается сразу в трее (но не с важным сообщением о библиотеке).
+    const startHidden = process.argv.includes(HIDDEN_FLAG) && settings.startMinimized && !libraryNotice;
+    createWindow(startHidden);
+    if (startHidden && !hideToTray()) win.once('ready-to-show', () => win.show());
     // Тихая проверка через несколько секунд после запуска, если она не выключена в настройках.
     if (settings.checkUpdates) win.once('ready-to-show', () => setTimeout(() => updater.check(), 4000));
     if (libraryNotice) {
@@ -1046,6 +1144,6 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   // Игры продолжат работать после нашего выхода: время, прошедшее до него, сохраняем сейчас.
-  app.on('before-quit', () => { for (const id of [...sessions.keys()]) endSession(id); });
+  app.on('before-quit', () => { quitting = true; for (const id of [...sessions.keys()]) endSession(id); });
   app.on('window-all-closed', () => app.quit());
 }

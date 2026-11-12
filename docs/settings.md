@@ -17,7 +17,9 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
   "autostart": false,
   "logging": false,
   "javaPath": "",
-  "checkUpdates": true
+  "checkUpdates": true,
+  "closeAction": "ask",
+  "startMinimized": false
 }
 ```
 
@@ -31,6 +33,8 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 | `autostart` | `true` / `false` | `false` | Start with Windows |
 | `logging` | `true` / `false` | `false` | Write `logs\manygamelib.log` |
 | `checkUpdates` | `true` / `false` | `true` | Check GitHub for a newer version after startup (see [Updates](updates.md)) |
+| `closeAction` | `ask`, `tray`, `quit` | `ask` | What the window's cross does: ask, hide to the tray, or quit (see "Tray") |
+| `startMinimized` | `true` / `false` | `false` | When started by Windows autostart, open straight into the tray |
 | `javaPath` | string up to 500 chars | `""` | A specific `javaw.exe` for `.jar` files; empty means "search automatically" |
 
 ## Reading, validating, saving
@@ -43,7 +47,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 - `background.file` is accepted only if it is a bare file name (`path.basename(x) === x`), so a hand-edited file cannot point outside `icons\`;
 - `mode: custom` without a file becomes `default`.
 
-**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `autostart`, `logging`, `javaPath`, `checkUpdates`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
+**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
 
 **`saveSettings(next)`** writes `settings.json.tmp`, copies the current file to `settings.json.bak`, then renames the temporary file over the real one (with the same short retry on locked files as the library).
 
@@ -112,7 +116,7 @@ The `heroBackground` toggle removes the card itself. `body.hero-flat` hides `.he
 
 ## General settings
 
-**Autostart.** `autostart` is applied with `app.setLoginItemSettings({ openAtLogin })`, and only when `app.isPackaged`. When running from source (`npm start`) it would register `electron.exe` instead of ManyGameLib, so the toggle is disabled in the UI (`get_app_info` returns `packaged`). `afterSettingsChange(prev, next)` calls it only when the value actually changed, and a reset turns it off. At startup the app compares `getLoginItemSettings()` with the setting and fixes a mismatch.
+**Autostart.** `autostart` is applied with `app.setLoginItemSettings({ openAtLogin, args: ['--hidden'] })`, and only when `app.isPackaged`. When running from source (`npm start`) it would register `electron.exe` instead of ManyGameLib, so the toggle is disabled in the UI (`get_app_info` returns `packaged`). `afterSettingsChange(prev, next)` calls it only when the value actually changed, and a reset turns it off. At startup the app compares `getLoginItemSettings({ args })` with the setting and fixes a mismatch.
 
 **Logging.** When `logging` is on, `logLine()` appends to `logs\manygamelib.log`:
 
@@ -125,6 +129,18 @@ It records app start (version, Electron, platform), game launches, the Java that
 
 **Java path.** If `javaPath` is set, `findJavaw()` uses only that file. A wrong path is an explicit error ("Java file from settings not found"), not a silent switch to some other Java. Empty means the automatic search described in [Launching](launching.md). The page picks the file with the same native dialog as everything else.
 
+## Tray
+
+The cross of the window (and Alt+F4) is handled in `onCloseRequest`, according to `closeAction`:
+
+- `quit`: the window closes and the app exits.
+- `tray`: the window is hidden and an icon appears near the clock. A click on the icon or "Открыть ManyGameLib" in its menu shows the window again (and removes the icon); "Выйти" in the menu quits. A second copy of the app started by the user also shows the hidden window.
+- `ask`: a small native dialog "Что сделать при закрытии окна?" with the buttons "Свернуть в трей", "Закрыть", "Отмена" and the checkbox "Запомнить выбор". "Отмена" does nothing and remembers nothing. With the checkbox on, the choice is written to `closeAction`, so the question is not asked again; it can be changed on the General tab. Only one dialog can be open at a time.
+
+If the tray icon cannot be created, the window is not hidden (there would be no way to get it back) and the app quits instead. The `quitting` flag is set in `before-quit` and on `session-end`, so quitting from the menu, an update install and Windows shutdown are never blocked by "hide to tray". Time in games keeps being counted while the window is hidden.
+
+**Open in the tray.** Autostart registers the app with the argument `--hidden`. If `startMinimized` is on and the argument is present, the window is created but not shown and the tray icon is placed at once. A normal start (shortcut, installer) always shows the window, and so does a start with the "library restored" notice. Copies registered by an older version have no argument; the startup check sees the mismatch and registers them again.
+
 **Reset.** `reset_settings` writes the defaults, removes the user's wallpaper file, applies the side effects (autostart off) and writes a log line. Games and the library are not touched.
 
 ## The Settings page
@@ -133,7 +149,7 @@ It records app start (version, Electron, platform), game launches, the Java that
 
 | Tab | Contents |
 |-----|----------|
-| General (Общие) | Autostart, logging (and "Open folder" when on), reset |
+| General (Общие) | Autostart, open in the tray, the window's cross, logging (and "Open folder" when on), reset |
 | Appearance (Внешний вид) | Background mode, own picture, blur, dim, top block background |
 | Library (Библиотека) | Game count, games with a missing file, data folder, Java path, short backup info |
 | About (О приложении) | Updates card (see [Updates](updates.md)), version, Electron, Chromium, Node.js, license, link to the repository |
