@@ -89,7 +89,7 @@ The "game background" is **not** an app-wide mode: a game's own background exist
 
 ### Own picture
 
-`set_wallpaper` runs the same `copyImage()` used for game images (extension check, 8 MB limit) with the kind `wallpaper`, so the copy is `icons\app-wallpaper-<random>.<ext>`. Then it saves the settings with mode `custom`. The previous wallpaper file is removed only **after** the save succeeds; if the save fails, the new copy is removed and the old state stays. `clear_wallpaper` clears the file name, deletes the file and, because a `custom` mode without a file falls back to `default`, returns to the bundled picture. `get_wallpaper` reads the file as a data URL; the page asks for it only when the mode is `custom`.
+`set_wallpaper` runs the same `copyImage()` used for game images (extension check, size limit) with the kind `wallpaper` and its own limit of **40 MB** (`MAX_WALLPAPER_BYTES`, instead of 8 MB, because an animated GIF is big), so the copy is `icons\app-wallpaper-<random>.<ext>`. Then it saves the settings with mode `custom`. The previous wallpaper file is removed only **after** the save succeeds; if the save fails, the new copy is removed and the old state stays. `clear_wallpaper` clears the file name, deletes the file and, because a `custom` mode without a file falls back to `default`, returns to the bundled picture. An animated GIF stays animated, because the picture is an ordinary CSS background; the blur is applied to every frame, so with a large GIF a low blur is lighter for the graphics card. `get_wallpaper` reads the file as a data URL (with the same 40 MB limit); the page asks for it only when the mode is `custom`.
 
 ### How it is drawn
 

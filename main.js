@@ -13,6 +13,7 @@ const LICENSE_NAME = 'MIT';
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'ico', 'bmp', 'gif'];
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_WALLPAPER_BYTES = 40 * 1024 * 1024; // фон приложения: анимированные GIF весят много
 const MIME = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
   ico: 'image/x-icon', bmp: 'image/bmp', gif: 'image/gif',
@@ -333,19 +334,21 @@ const extOf = (p) => path.extname(String(p || '')).slice(1).toLowerCase();
 const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const hasImage = (name) => !!name && isFile(path.join(iconsDir, name));
 
-function dataUrl(file) {
+const sizeError = (max) => `Файл картинки слишком большой (больше ${Math.round(max / 1024 / 1024)} МБ).`;
+
+function dataUrl(file, maxBytes = MAX_IMAGE_BYTES) {
   const ext = extOf(file);
   if (!IMAGE_EXTS.includes(ext)) throw new Error(BAD_IMAGE);
   let stat;
   try { stat = fs.statSync(file); } catch (e) { throw new Error(`Не удалось открыть картинку: ${e.message}`); }
-  if (stat.size > MAX_IMAGE_BYTES) throw new Error('Файл картинки слишком большой (больше 8 МБ).');
+  if (stat.size > maxBytes) throw new Error(sizeError(maxBytes));
   const buf = fs.readFileSync(file);
   return `data:${MIME[ext]};base64,${buf.toString('base64')}`;
 }
 
-function readImage(name) {
+function readImage(name, maxBytes) {
   if (!name) return null;
-  try { return dataUrl(path.join(iconsDir, name)); } catch { return null; }
+  try { return dataUrl(path.join(iconsDir, name), maxBytes); } catch { return null; }
 }
 
 function normalizeHero(h) {
@@ -458,13 +461,13 @@ function checkExe(exePath, selfId) {
 
 /* ---------- Картинки игры ---------- */
 
-function copyImage(src, id, kind) {
+function copyImage(src, id, kind, maxBytes = MAX_IMAGE_BYTES) {
   src = String(src || '');
   if (!IMAGE_EXTS.includes(extOf(src))) throw new Error(BAD_IMAGE);
   let stat;
   try { stat = fs.statSync(src); } catch (e) { throw new Error(`Не удалось открыть картинку: ${e.message}`); }
   if (!stat.isFile()) throw new Error('Не удалось открыть картинку: это не файл.');
-  if (stat.size > MAX_IMAGE_BYTES) throw new Error('Файл картинки слишком большой (больше 8 МБ).');
+  if (stat.size > maxBytes) throw new Error(sizeError(maxBytes));
   // Имя уникально, чтобы после замены картинки не подхватился старый кеш.
   const name = `${id}-${kind}-${Date.now().toString(36)}.${extOf(src)}`;
   try {
@@ -911,7 +914,7 @@ function registerHandlers() {
   /* Своя картинка для фона: копируем в папку библиотеки, включаем режим custom,
      старый файл удаляем только после успешного сохранения. */
   handle('set_wallpaper', ({ path: p }) => {
-    const name = copyImage(p, 'app', 'wallpaper');
+    const name = copyImage(p, 'app', 'wallpaper', MAX_WALLPAPER_BYTES);
     const old = settings.background.file;
     try {
       saveSettings(normalizeSettings({ ...settings, background: { ...settings.background, mode: 'custom', file: name } }));
@@ -931,7 +934,7 @@ function registerHandlers() {
     return settings;
   });
 
-  handle('get_wallpaper', () => readImage(settings.background.file));
+  handle('get_wallpaper', () => readImage(settings.background.file, MAX_WALLPAPER_BYTES));
 
   handle('get_settings', () => settings);
 

@@ -642,7 +642,7 @@ function appearancePanel() {
     });
   const rows = [settingRow('Фон', 'Картинка за интерфейсом', modes.node)];
   if (bg.mode === 'custom') {
-    rows.push(settingRow('Своя картинка', 'PNG, JPG, WEBP, GIF, BMP или ICO до 8 МБ. Лучше всего 1920×1080',
+    rows.push(settingRow('Своя картинка', 'PNG, JPG, WEBP, BMP или GIF до 40 МБ, GIF может быть анимированной. Лучше всего 1920×1080',
       h('div', { class: 's-buttons' },
         h('button', { class: 'btn ghost small', type: 'button', onClick: pickWallpaper }, icon('image'), bg.file ? 'Заменить' : 'Выбрать'),
         bg.file && h('button', { class: 'btn ghost small', type: 'button', onClick: clearWallpaper }, 'Убрать'))));

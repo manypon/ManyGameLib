@@ -12,7 +12,7 @@ Each game can have up to three images and a few top-block settings. This page ex
 | `banner` | `banner_file` | Optional background of the top block |
 | `logo` | `logo_file` | Optional logo shown instead of the title text |
 
-Accepted formats: PNG, JPG/JPEG, WEBP, ICO, BMP, GIF. Maximum size: **8 MB** per file. These checks run in the main process for every image, whatever the UI did.
+Accepted formats: PNG, JPG/JPEG, WEBP, ICO, BMP, GIF. Maximum size: **8 MB** per file (the app background has its own limit of 40 MB, see [Settings](settings.md)). These checks run in the main process for every image, whatever the UI did.
 
 ## Copies, not links
 
