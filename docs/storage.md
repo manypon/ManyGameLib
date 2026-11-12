@@ -16,6 +16,7 @@ manygamelib/
 ├─ games.corrupt-<date>.json        a corrupted file, kept aside (only after a problem)
 ├─ settings.json                    app settings (created on the first save)
 ├─ settings.json.bak                previous version of the settings
+├─ secrets.json                     the SteamGridDB API key, encrypted by Windows (created when you save a key, see Cover search)
 ├─ settings.corrupt-<date>.json     a corrupted settings file, kept aside (only after a problem)
 ├─ logs/
 │  ├─ manygamelib.log               the log (only when logging is on)

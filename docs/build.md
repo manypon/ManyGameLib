@@ -40,7 +40,7 @@ The build script is `electron-builder --publish never`: publishing is done by th
 | Setting | Value | Why |
 |---------|-------|-----|
 | `appId` / `productName` | `com.manygamelib.app` / `ManyGameLib` | Identity and the exe name |
-| `files` | `main.js`, `preload.js`, `updater.js`, `zip.js`, `ui/**/*`, `build/**/*` (without `build/afterPack.js`) | Only what the app needs ends up in the package |
+| `files` | `main.js`, `preload.js`, `updater.js`, `zip.js`, `sgdb.js`, `ui/**/*`, `build/**/*` (without `build/afterPack.js`) | Only what the app needs ends up in the package |
 | `afterPack` | `build/afterPack.js` | Writes the icon and version info into the exe (see below) |
 | `publish` | GitHub, `manypon/ManyGameLib` | Makes electron-builder write `latest.yml` and `app-update.yml` for the updater; nothing is published by the build |
 | `electronDist` | `node_modules/electron/dist` | Reuse the Electron already installed by `npm install` instead of downloading it again at build time |
@@ -62,7 +62,7 @@ The installer is not code-signed, so Windows SmartScreen may warn on the first r
 
 ### If Electron does not download
 
-`npm install` downloads Electron from GitHub. If that fails (for example with a 504), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `updater.js`, `zip.js`, `package.json`, `ui` and `build` into `resources\app`.
+`npm install` downloads Electron from GitHub. If that fails (for example with a 504), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `updater.js`, `zip.js`, `sgdb.js`, `package.json`, `ui` and `build` into `resources\app`.
 
 ## Versions and commits
 

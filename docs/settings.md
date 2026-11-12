@@ -151,7 +151,7 @@ If the tray icon cannot be created, the window is not hidden (there would be no 
 |-----|----------|
 | General (Общие) | Autostart, open in the tray, the window's cross, logging (and "Open folder" when on), reset |
 | Appearance (Внешний вид) | Background mode, own picture, blur, dim, top block background |
-| Library (Библиотека) | Game count, games with a missing file, data folder, Java path, export and import (see [Moving the library](transfer.md)), short backup info |
+| Library (Библиотека) | Game count, games with a missing file, data folder, Java path, export and import (see [Moving the library](transfer.md)), the SteamGridDB key (see [Cover search](sgdb.md)), short backup info |
 | About (О приложении) | Updates card (see [Updates](updates.md)), version, Electron, Chromium, Node.js, license, link to the repository |
 
 The page is built from small helpers: `settingsCard`, `settingRow`, `toggle`, `slider`, and the existing `segmented`. Data for About and the data folder come from `get_app_info` through `ensureAppInfo()`.

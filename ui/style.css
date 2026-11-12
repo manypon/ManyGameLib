@@ -526,3 +526,28 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .switch input:focus-visible + .switch-knob { outline: 2px solid var(--accent); outline-offset: 2px; }
 .switch.is-disabled { opacity: 0.45; cursor: not-allowed; }
 .switch.is-disabled input { cursor: not-allowed; }
+
+/* ---------- Поиск в SteamGridDB ---------- */
+.sg-find { margin-top: 8px; align-self: flex-start; }
+.sg-panel .sg-body { display: flex; flex-direction: column; gap: 14px; }
+.sg-panel .pick-row .input { flex: 1; min-width: 0; }
+.sg-games { display: flex; flex-wrap: wrap; gap: 8px; }
+.sg-chip { padding: 7px 13px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: #cfcfdd; font-size: 13px; border: 1px solid transparent; }
+.sg-chip:hover { background: rgba(255, 255, 255, 0.1); }
+.sg-chip.active { background: var(--accent-soft); color: #fff; border-color: rgba(122, 92, 255, 0.45); }
+.sg-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-strong); }
+.sg-tab { padding: 9px 14px; color: var(--muted); font-weight: 600; font-size: 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.sg-tab:hover { color: var(--text); }
+.sg-tab.active { color: #fff; border-bottom-color: var(--accent); }
+.sg-results { min-height: 120px; }
+.sg-results.busy { opacity: 0.5; pointer-events: none; }
+.sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; max-height: 46vh; overflow-y: auto; padding: 2px; }
+.sg-grid.wide { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.sg-thumb { position: relative; border-radius: 10px; overflow: hidden; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-strong); padding: 0; aspect-ratio: 2 / 3; }
+.sg-grid.wide .sg-thumb { aspect-ratio: 96 / 31; }
+.sg-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.sg-thumb:hover { border-color: rgba(122, 92, 255, 0.8); box-shadow: 0 0 0 2px var(--accent-soft); }
+.sg-size { position: absolute; right: 6px; bottom: 6px; padding: 2px 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.65); color: #ddd; font-size: 11px; }
+.sg-credit { margin: 0; }
+.sg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.sg-head h4 { font-size: 16px; }

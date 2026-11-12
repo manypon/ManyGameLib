@@ -27,7 +27,7 @@ npm run build
 
 Output: the installer `dist\ManyGameLib-Setup-<version>.exe` and the portable folder `dist\win-unpacked\ManyGameLib.exe`. The whole `win-unpacked` folder can be moved anywhere, and Node.js is not needed to run it.
 
-If Electron fails to download (a 504 or other network error), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `updater.js`, `zip.js`, `package.json`, `ui` and `build` into `resources\app`.
+If Electron fails to download (a 504 or other network error), you can assemble the app by hand from an Electron build you already have: copy its `dist` folder as `ManyGameLib`, rename `electron.exe` to `ManyGameLib.exe`, and put `main.js`, `preload.js`, `updater.js`, `zip.js`, `sgdb.js`, `package.json`, `ui` and `build` into `resources\app`.
 
 ## Features
 
@@ -38,6 +38,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Drag and drop:** drop `.exe`, `.jar`, `.lnk` and other game files into the window. The add form opens with the path, name and icon filled in; several files go one after another.
 - **Icon from the game file:** for `.exe` and `.lnk` the icon is taken automatically when you add a game (or with the "From file" button); you can always pick your own picture.
 - **Launch arguments** per game (for `.exe`, `.com` and `.jar`), for example `-windowed -nolauncher`.
+- **Cover search:** the "Найти в SteamGridDB" button in the game form finds covers, banners, logos and icons (needs your own free SteamGridDB API key, stored encrypted on your computer).
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu. While a game is running, its button shows "Играет" and it cannot be started a second time.
@@ -55,7 +56,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 
 - `games.json`: the list of games
 - `icons\`: copies of the icons you picked (they survive even if the original files are deleted)
-- `settings.json`: your settings (the app background copy is in `icons\`); `logs\`: the log, only if you turn it on
+- `settings.json`: your settings (the app background copy is in `icons\`); `secrets.json`: the SteamGridDB key, encrypted by Windows, only if you add one; `logs\`: the log, only if you turn it on
 - `games.json.bak`: the previous version of the list, updated on every save
 - `backups\`: one copy of the list per app start, the last 5 are kept
 - If `games.json` is corrupted, it is renamed to `games.corrupt-<date>.json` (never overwritten) and the last good copy is restored automatically, with a notice.
@@ -79,6 +80,7 @@ manygamelib/
 ├─ preload.js     safe bridge between the UI and main.js
 ├─ updater.js     update check, download and install
 ├─ zip.js         ZIP reading and writing for library export and import
+├─ sgdb.js        cover search in SteamGridDB
 ├─ ui/            interface (index.html, style.css, app.js, assets/)
 ├─ build/         app icons
 ├─ docs/          technical documentation

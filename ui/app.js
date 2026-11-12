@@ -563,6 +563,7 @@ async function loadSettings() {
   try {
     state.settings = await invoke('get_settings');
     if (state.settings.background.mode === 'custom') state.wallpaper = await invoke('get_wallpaper');
+    state.sgdbKey = (await invoke('sgdb_state')).hasKey;
   } catch (e) {
     toast(errText(e), 'error');
   }
@@ -740,6 +741,30 @@ function generalPanel() {
   ];
 }
 
+/* Ключ SteamGridDB: страница знает только «есть или нет». */
+function sgdbRow() {
+  const input = h('input', { class: 'input', type: 'password', placeholder: 'Вставьте ключ', autocomplete: 'off', spellcheck: false });
+  const note = h('div', { class: 'form-error', hidden: true });
+  const act = async (cmd, args) => {
+    try {
+      const res = await invoke(cmd, args);
+      state.sgdbKey = res.hasKey;
+      if (res.hasKey) toast(res.verified === false ? 'Ключ сохранён, но проверить его не удалось: нет связи с SteamGridDB.' : 'Ключ сохранён');
+      render();
+    } catch (e) { note.textContent = errText(e); note.hidden = false; }
+  };
+  const save = () => act('sgdb_set_key', { key: input.value });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  const link = h('button', { class: 'btn ghost small', type: 'button', onClick: () => invoke('open_external', { target: 'sgdb_key' }).catch((e) => toast(errText(e), 'error')) }, 'Где взять ключ');
+  return settingRow('API-ключ',
+    state.sgdbKey ? 'Сохранён на этом компьютере в зашифрованном виде' : 'Нужен для поиска обложек. Бесплатный, берётся в профиле на steamgriddb.com',
+    h('div', {},
+      state.sgdbKey
+        ? h('div', { class: 's-buttons' }, h('button', { class: 'btn ghost small', type: 'button', onClick: () => act('sgdb_clear_key') }, 'Удалить ключ'))
+        : h('div', { class: 's-buttons' }, input, h('button', { class: 'btn primary small', type: 'button', onClick: save }, 'Сохранить'), link),
+      note));
+}
+
 let transferBusy = false;
 
 /* Экспорт и импорт: окна выбора файла открывает главный процесс, страница путей не задаёт. */
@@ -789,6 +814,8 @@ function libraryPanel() {
         h('button', { class: 'btn ghost small', type: 'button', disabled: transferBusy || !total, onClick: () => transfer('export') }, icon('folder'), 'Экспортировать…')),
       settingRow('Импорт', 'Игры из архива добавляются к вашим, игры с тем же путём к файлу пропускаются. Открывайте только архивы, которым доверяете',
         h('button', { class: 'btn ghost small', type: 'button', disabled: transferBusy, onClick: () => transfer('import') }, icon('folder'), 'Импортировать…'))),
+    settingsCard('SteamGridDB', 'Поиск обложек, баннеров и логотипов в форме игры, кнопка «Найти в SteamGridDB»',
+      sgdbRow()),
     settingsCard('Защита данных', 'Список игр хранится безопасно',
       settingRow('Предыдущая версия списка', 'Файл games.json.bak, обновляется при каждом сохранении', null),
       settingRow('Копии за запуски', 'Папка backups: по одной копии за запуск, последние 5', null),
@@ -1261,6 +1288,143 @@ function checkbox(label, get, set) {
 const field = (label, ...kids) =>
   h('div', { class: 'field' }, h('span', { class: 'field-label' }, label), ...kids);
 
+/* ---------- Поиск картинок в SteamGridDB ---------- */
+
+/* Пока открыта панель поиска, Esc закрывает её, а не всё окно. */
+let escHook = null;
+
+const SGDB_TABS = [
+  { key: 'cover', label: 'Обложка', target: 'icon', wide: false },
+  { key: 'banner', label: 'Баннер', target: 'banner', wide: true },
+  { key: 'logo', label: 'Логотип', target: 'logo', wide: false },
+  { key: 'icon', label: 'Иконка', target: 'icon', wide: false },
+];
+const SGDB_PICKED = { cover: 'Обложка выбрана', banner: 'Баннер выбран', logo: 'Логотип выбран', icon: 'Иконка выбрана' };
+
+/* Панель встаёт на место формы внутри того же окна. onPick(target, path, url): как после кнопки «Обзор…». */
+function openSgdbPanel({ host, form, name, onPick }) {
+  const view = { game: null, tab: 'cover', games: [], cache: new Map(), busy: false };
+  const body = h('div', { class: 'sg-body' });
+  const close = () => { panel.remove(); form.hidden = false; escHook = null; };
+  const panel = h('div', { class: 'sg-panel' },
+    h('div', { class: 'sg-head' },
+      h('h4', {}, 'Поиск в SteamGridDB'),
+      h('button', { class: 'btn ghost small', type: 'button', onClick: close }, 'Назад к форме')),
+    body);
+  form.hidden = true;
+  host.append(panel);
+  escHook = () => { close(); return true; };
+
+  const fail = (e) => { body.querySelector('.sg-results')?.replaceChildren(h('div', { class: 'form-error' }, errText(e))); };
+
+  /* --- Ключ --- */
+  function keyScreen(message) {
+    const input = h('input', { class: 'input', type: 'password', placeholder: 'API-ключ SteamGridDB', autocomplete: 'off', spellcheck: false });
+    const err = h('div', { class: 'form-error', hidden: true });
+    const save = async () => {
+      err.hidden = true;
+      try {
+        const res = await invoke('sgdb_set_key', { key: input.value });
+        input.value = '';
+        state.sgdbKey = true;
+        if (!res.verified) toast('Ключ сохранён, но проверить его не удалось: нет связи с SteamGridDB.');
+        mainScreen();
+      } catch (e) { err.textContent = errText(e); err.hidden = false; }
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+    body.replaceChildren(
+      h('p', { class: 'hint' }, message || 'Для поиска нужен ваш личный ключ SteamGridDB. Он бесплатный: зарегистрируйтесь на сайте и скопируйте ключ из профиля («Preferences → API»). Ключ хранится только на этом компьютере, в зашифрованном виде.'),
+      h('div', { class: 'pick-row' }, input, h('button', { class: 'btn primary small', type: 'button', onClick: save }, 'Сохранить')),
+      err,
+      h('button', { class: 'btn ghost small', type: 'button', onClick: () => invoke('open_external', { target: 'sgdb_key' }).catch((e) => toast(errText(e), 'error')) }, 'Открыть страницу с ключом'));
+    setTimeout(() => input.focus(), 30);
+  }
+
+  /* --- Поиск и картинки --- */
+  const queryInput = h('input', { class: 'input', type: 'text', value: name || '', placeholder: 'Название игры', spellcheck: false });
+  const gamesBox = h('div', { class: 'sg-games' });
+  const tabsBox = h('div', { class: 'sg-tabs' });
+  const results = h('div', { class: 'sg-results' });
+
+  function renderGames() {
+    gamesBox.replaceChildren(...view.games.map((g) => h('button', {
+      type: 'button', class: `sg-chip${view.game && view.game.id === g.id ? ' active' : ''}`, onClick: () => selectGame(g),
+    }, g.name)));
+  }
+  function renderTabs() {
+    tabsBox.replaceChildren(...SGDB_TABS.map((t) => h('button', {
+      type: 'button', class: `sg-tab${view.tab === t.key ? ' active' : ''}`, onClick: () => { view.tab = t.key; renderTabs(); loadImages(); },
+    }, t.label)));
+  }
+
+  async function search() {
+    const term = queryInput.value.trim();
+    if (!term) { results.replaceChildren(h('div', { class: 'hint' }, 'Введите название игры и нажмите «Найти».')); return; }
+    results.replaceChildren(h('div', { class: 'hint' }, 'Ищу…'));
+    try {
+      view.games = await invoke('sgdb_search', { term });
+      view.game = null;
+      renderGames();
+      if (!view.games.length) { results.replaceChildren(h('div', { class: 'hint' }, 'Ничего не найдено. Попробуйте другое название.')); return; }
+      selectGame(view.games[0]);
+    } catch (e) { handleError(e); }
+  }
+
+  function handleError(e) {
+    if (e && /NO_KEY|API-ключ|не принял ключ/.test(String(e.message || e))) {
+      state.sgdbKey = false; keyScreen(/не принял/.test(String(e.message || e)) ? 'SteamGridDB не принял ключ. Вставьте другой.' : ''); return; }
+    fail(e);
+  }
+
+  function selectGame(g) { view.game = g; renderGames(); loadImages(); }
+
+  async function loadImages() {
+    if (!view.game) return;
+    const id = view.game.id;
+    const tab = SGDB_TABS.find((t) => t.key === view.tab);
+    const ck = `${id}:${tab.key}`;
+    results.replaceChildren(h('div', { class: 'hint' }, 'Загружаю…'));
+    try {
+      let list = view.cache.get(ck);
+      if (!list) { list = await invoke('sgdb_images', { gameId: id, kind: tab.key }); view.cache.set(ck, list); }
+      if (!view.game || view.game.id !== id || view.tab !== tab.key) return;   // пока грузили, выбрали другое
+      if (!list.length) { results.replaceChildren(h('div', { class: 'hint' }, 'Для этой игры тут ничего нет.')); return; }
+      results.replaceChildren(h('div', { class: `sg-grid${tab.wide ? ' wide' : ''}` }, ...list.map((it) => h('button', {
+        type: 'button', class: 'sg-thumb', title: it.width && it.height ? `${it.width}×${it.height}` : '', onClick: () => choose(it, tab),
+      }, h('img', { src: it.thumb, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }),
+        it.width && it.height ? h('span', { class: 'sg-size' }, `${it.width}×${it.height}`) : null))));
+    } catch (e) { handleError(e); }
+  }
+
+  async function choose(it, tab) {
+    if (view.busy) return;
+    view.busy = true;
+    results.classList.add('busy');
+    try {
+      const got = await invoke('sgdb_download', { url: it.url });
+      onPick(tab.target, got.path, got.url);
+      toast(SGDB_PICKED[tab.key]);
+      close();
+    } catch (e) {
+      results.classList.remove('busy');
+      toast(errText(e), 'error');
+    }
+    view.busy = false;
+  }
+
+  function mainScreen() {
+    body.replaceChildren(
+      h('div', { class: 'pick-row' }, queryInput, h('button', { class: 'btn primary small', type: 'button', onClick: search }, 'Найти')),
+      gamesBox, tabsBox, results,
+      h('p', { class: 'hint sg-credit' }, 'Картинки с SteamGridDB (steamgriddb.com). Выбранная картинка копируется в вашу библиотеку.'));
+    queryInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+    renderTabs();
+    search();
+  }
+
+  invoke('sgdb_state').then((st) => (st.hasKey ? mainScreen() : keyScreen())).catch((e) => body.replaceChildren(h('div', { class: 'form-error' }, errText(e))));
+}
+
 /* ---------- Форма добавления и изменения игры ---------- */
 
 const PICK_TITLES = {
@@ -1431,6 +1595,18 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     updatePreview();
   }
 
+  const sgdbBtn = h('button', {
+    class: 'btn ghost small sg-find', type: 'button', title: 'Найти обложку, баннер и логотип в SteamGridDB',
+    onClick: () => {
+      const host = form.closest('.modal');
+      if (!host) return;
+      openSgdbPanel({
+        host, form, name: st.name.trim(),
+        onPick: (target, path, url) => setImage(target, path, url),
+      });
+    },
+  }, icon('image'), 'Найти в SteamGridDB');
+
   const bannerRow = imageRow('banner', 'Широкая картинка, например 1920×620');
   const logoRow = imageRow('logo', 'PNG с прозрачным фоном (необязательно)');
   iconRow.row.insertBefore(fromFileBtn, iconRow.row.lastElementChild);
@@ -1580,7 +1756,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
         iconPick,
         h('div', { class: 'icon-side' },
           iconRow.row,
-          h('span', { class: 'hint' }, 'Лучше всего квадрат 512×512 или вертикальная обложка 600×900. Для exe иконка берётся из самого файла, но она небольшая: своя картинка выглядит чётче. Без иконки будет цветная плитка с первой буквой.')))),
+          h('span', { class: 'hint' }, 'Лучше всего квадрат 512×512 или вертикальная обложка 600×900. Для exe иконка берётся из самого файла, но она небольшая: своя картинка выглядит чётче. Без иконки будет цветная плитка с первой буквой.'),
+          sgdbBtn))),
     h('div', { class: 'hero-cfg' },
       h('div', { class: 'section-title' }, 'Верхний блок'),
       h('p', { class: 'hint' }, 'Так игра выглядит вверху библиотеки, когда она выбрана. Предпросмотр ниже обновляется сразу.'),
@@ -1696,7 +1873,7 @@ function setMaximized(maximized) {
 /* ---------- Старт ---------- */
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeMenu(); tryDismiss(); }
+  if (e.key === 'Escape') { closeMenu(); if (escHook && escHook()) return; tryDismiss(); }
 });
 
 $('#nav').addEventListener('click', (e) => {

@@ -20,6 +20,7 @@ ManyGameLib — небольшое приложение на Electron из тр�
 | Файл | Процесс | За что отвечает |
 |------|---------|-----------------|
 | `updater.js` | главный (main) | Проверка, скачивание и установка обновлений (подключается из `main.js`) |
+| `sgdb.js` | главный (main) | Поиск обложек в SteamGridDB, зашифрованный ключ API (подключается из `main.js`, см. [Поиск обложек](sgdb_RU.md)) |
 | `zip.js` | главный (main) | Чтение и запись ZIP для экспорта и импорта библиотеки (подключается из `main.js`, см. [Перенос библиотеки](transfer_RU.md)) |
 | `main.js` | главный (main) | Хранение библиотеки, резервные копии, настройки, журнал, автозапуск, копии картинок, запуск игр, системные диалоги, окно, значок в трее |
 | `preload.js` | preload (изолированный) | Отдаёт странице `window.api` с фиксированным набором команд |
@@ -34,7 +35,7 @@ ManyGameLib — небольшое приложение на Electron из тр�
 - `contextIsolation: true`: страница и preload-скрипт работают в разных мирах JavaScript.
 - `nodeIntegration: false` и `sandbox: true`: у страницы нет `require` и API Node.
 - Content Security Policy в `ui/index.html`:
-  `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'`.
+  `default-src 'self'; img-src 'self' data: https://*.steamgriddb.com; style-src 'self' 'unsafe-inline'; script-src 'self'`.
   Выполняются только собственные скрипты приложения (ни встроенных, ни удалённых). Картинки берутся из приложения или из `data:`-ссылок, потому что изображения игр передаются странице как data URL.
 
 Окно также нельзя увести на другой адрес или открыть из него новые окна (`setWindowOpenHandler` и `will-navigate` блокируют оба случая). `open_external` принимает только ключевые слова `data`, `logs`, `repo` и `release`, но не путь и не адрес, поэтому страница не может с его помощью открыть произвольный файл или ссылку.
@@ -78,6 +79,12 @@ Preload-скрипт отдаёт `window.api` из семи членов:
 | `set_wallpaper` | `{ path }` | Настройки со своим фоном приложения |
 | `clear_wallpaper` | нет | Настройки без своего фона |
 | `get_wallpaper` | нет | Свой фон в виде data URL или `null` |
+| `sgdb_state` | нет | `{ hasKey }`; сам ключ страница не получает (см. [Поиск обложек](sgdb_RU.md)) |
+| `sgdb_set_key` | `{ key }` | `{ hasKey, verified }`; ключ, который SteamGridDB отклонил, не сохраняется |
+| `sgdb_clear_key` | нет | `{ hasKey: false }` |
+| `sgdb_search` | `{ term }` | До 12 игр `{ id, name, verified }` |
+| `sgdb_images` | `{ gameId, kind }` | Картинки `{ id, url, thumb, width, height, style }`; `kind` это `cover`, `banner`, `logo` или `icon` |
+| `sgdb_download` | `{ url }` | `{ path, url }`: временный файл и его превью |
 | `export_library` | нет | `{ count, path }` после сохранения ZIP или `null`, если окно закрыли без выбора (см. [Перенос библиотеки](transfer_RU.md)) |
 | `import_library` | нет | `{ added, skipped, imagesLost }` или `null`, если отменили |
 | `get_update_state` | нет | Состояние обновления |

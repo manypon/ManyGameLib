@@ -1,12 +1,13 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeImage, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeImage, Tray, Menu, safeStorage } = require('electron');
 const { writeZip, readZip } = require('./zip');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 const { createUpdater } = require('./updater');
+const { createSgdb } = require('./sgdb');
 
 const REPO_URL = 'https://github.com/manypon/ManyGameLib';
 const LICENSE_NAME = 'MIT';
@@ -30,6 +31,7 @@ const HERO_FIT = ['cover', 'contain'];
 
 let win = null;
 let updater = null;
+let sgdb = null;
 let dataDir, iconsDir, dbPath;
 let games = [];
 
@@ -904,6 +906,8 @@ function registerHandlers() {
       if (err) throw new Error(`Не удалось открыть папку: ${err}`);
     } else if (target === 'repo') {
       await shell.openExternal(REPO_URL);
+    } else if (target === 'sgdb_key') {
+      await shell.openExternal('https://www.steamgriddb.com/profile/preferences/api');
     } else if (target === 'release') {
       await shell.openExternal(`${REPO_URL}/releases/latest`);
     } else {
@@ -1006,6 +1010,14 @@ function registerHandlers() {
     logLine('info', `импорт: добавлено ${result.added}, пропущено ${result.skipped}, без картинки ${result.imagesLost} (${file})`);
     return result;
   });
+
+  /* SteamGridDB: ключ страница не видит, ей достаточно знать, есть ли он. */
+  handle('sgdb_state', () => ({ hasKey: sgdb.hasKey() }));
+  handle('sgdb_set_key', ({ key }) => sgdb.setKey(key));
+  handle('sgdb_clear_key', () => sgdb.clearKey());
+  handle('sgdb_search', ({ term }) => sgdb.search(term));
+  handle('sgdb_images', ({ gameId, kind }) => sgdb.images(gameId, kind));
+  handle('sgdb_download', ({ url }) => sgdb.download(url));
 
   handle('get_games', () => games.map(view));
 
@@ -1306,6 +1318,8 @@ if (!app.requestSingleInstanceLock()) {
       app, net, repoUrl: REPO_URL, log: logLine,
       send: (s) => { if (win && !win.isDestroyed()) win.webContents.send('update-state', s); },
     });
+    sgdb = createSgdb({ net, safeStorage, file: path.join(dataDir, 'secrets.json'), log: logLine });
+    sgdb.cleanTmp(0);   // остатки скачанных картинок от прошлого запуска
     registerHandlers();
     // Автозапуск с включённой настройкой открывается сразу в трее (но не с важным сообщением о библиотеке).
     const startHidden = process.argv.includes(HIDDEN_FLAG) && settings.startMinimized && !libraryNotice;
