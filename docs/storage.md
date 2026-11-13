@@ -46,6 +46,7 @@ A JSON array of game objects:
   "banner_file": null,
   "logo_file": null,
   "hero": { "bg": "blur", "art": true, "fit": "cover" },
+  "tags": ["Онлайн", "Пройдено"],
   "favorite": false,
   "last_played": 1731300000000,
   "playtime_sec": 45000,
@@ -57,6 +58,7 @@ A JSON array of game objects:
 - `name` is trimmed and cut to 80 characters.
 - `*_file` fields hold only a file name inside `icons/`, never a path, so the folder can be moved to another computer.
 - `hero` is normalized on every read: unknown values fall back to `blur`, `true` and `cover` (see [Images](images.md)).
+- `tags` is a list of the user's own labels, see [Tags](ui.md#tags). On every read and write it is cleaned: only strings, line breaks and control characters become spaces, at most 24 characters each and 12 per game, and tags that differ only in letter case count as one (the first stays). A missing field means no tags.
 - `exe_path` is an absolute path as chosen by the user.
 - `playtime_sec` is the time played, in seconds (integer, at most 100,000 hours; a missing field means 0). It is added to automatically and can be set by hand, see [Launching](launching.md).
 - `args` is the launch arguments as one string (empty by default; older games may not have the field). Line breaks and control characters are removed, at most 1000 characters.

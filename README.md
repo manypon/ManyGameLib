@@ -39,6 +39,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Icon from the game file:** for `.exe` and `.lnk` the icon is taken automatically when you add a game (or with the "From file" button); you can always pick your own picture.
 - **Launch arguments** per game (for `.exe`, `.com` and `.jar`), for example `-windowed -nolauncher`.
 - **Cover search:** the "Найти в SteamGridDB" button in the game form finds covers, banners, logos and icons (needs your own free SteamGridDB API key, stored encrypted on your computer).
+- **Tags:** give a game your own tags ("Пройдено", "В планах", "Онлайн"…) in its form; the sidebar lists them with counts, and a click filters the library (several tags: games with all of them). Right-click a tag to rename or delete it.
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu. While a game is running, its button shows "Играет" and it cannot be started a second time.

@@ -15,6 +15,7 @@ All UI state lives in one object:
 | `heroId` | The game currently shown in the top block (`null` if there is no top block on screen) |
 | `view` | `library`, `favorites`, `recent` or `settings` |
 | `query` | The search text |
+| `tagFilter` | The selected tags (lower case); a game must have all of them, see [Tags](#tags) |
 | `sort` | `name`, `added`, `played` or `playtime` (most played first) |
 | `layout` | `grid` or `list` |
 | `selectedId` | The game the user picked for the top block |
@@ -53,6 +54,15 @@ On a tile, a single click selects the game and a double-click launches it. Two t
 In sections that do not have a top block (Favorites, Recent, search), a single click opens the "About" window. That window would cover the second click, so there the single-click action waits 250 ms and is cancelled by a double-click.
 
 The ▶ button on a tile and the context menu stop event propagation so they do not trigger tile actions. Keyboard: Tab moves between tiles, Enter launches, Space does what a click does.
+
+## Tags
+
+A game can have several tags of the user's own (for example "Пройдено", "В планах", "Онлайн"). They are edited in the game form (a chip field: Enter or a comma adds a tag, Backspace removes the last one, existing tags are suggested) and stored as `tags` in `games.json` ([Storage](storage.md)).
+
+- **Sidebar.** The "Теги" block lists all tags with the number of games, in alphabetical order (`allTags()`: tags that differ only by letter case are one tag, the first spelling is shown). A click selects or deselects a tag, "Сбросить" clears the selection. Selecting several tags keeps only the games that have **all** of them (`byTags()`).
+- **Where the filter works.** On the library page it shows one list "Теги: … (N)" instead of the top block and rails; the Favorites and Recent pages and the search results are filtered too, so a tag, a search text and a sort order combine. The sidebar block follows the library: a tag that no game has any more is dropped from the selection by itself.
+- **Managing.** A right click on a tag opens "Переименовать" and "Удалить тег". Both call `rename_tag` ([Architecture](architecture.md)) once for all games, with one save and a rollback if saving fails. Renaming into an existing tag merges them. The details window also shows the game's tags.
+- **Limits.** 12 tags per game, 24 characters each. The main process cleans them again, so the page cannot store anything else.
 
 ## Search
 

@@ -551,3 +551,27 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .sg-credit { margin: 0; }
 .sg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .sg-head h4 { font-size: 16px; }
+
+/* ---------- Теги ---------- */
+.tags-block { margin-top: 18px; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
+.tags-block[hidden] { display: none; }
+.tags-head { display: flex; align-items: center; justify-content: space-between; padding: 0 12px 8px; color: var(--muted); font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.tags-reset { color: var(--accent-2, #9d86ff); font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.tags-reset:hover { text-decoration: underline; }
+.tags-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; padding-right: 2px; }
+.tag-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 12px; border-radius: 9px; color: var(--muted); font-size: 13.5px; text-align: left; }
+.tag-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+.tag-item.active { background: var(--accent-soft); color: #fff; box-shadow: inset 0 0 0 1px rgba(122, 92, 255, 0.35); }
+.tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-name::before { content: '#'; opacity: 0.5; margin-right: 2px; }
+.tag-count { flex: none; font-size: 12px; opacity: 0.7; }
+.tag-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); color: #d6d6e4; font-size: 12.5px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-box { display: block; padding: 8px 10px; background: rgba(0, 0, 0, 0.28); border: 1px solid var(--border-strong); border-radius: 12px; cursor: text; }
+.tag-box:focus-within { border-color: rgba(122, 92, 255, 0.7); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag-pill.removable { padding-right: 4px; background: var(--accent-soft); color: #fff; }
+.tag-x { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; color: inherit; opacity: 0.7; }
+.tag-x:hover { background: rgba(255, 255, 255, 0.15); opacity: 1; }
+.tag-x svg { width: 10px; height: 10px; stroke-width: 2.4; }
+.tag-input { flex: 1; min-width: 110px; background: transparent; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 14px; padding: 4px 2px; }

@@ -22,6 +22,7 @@ const state = {
   heroId: null,         // игра, которая сейчас показана в верхнем блоке
   view: 'library',      // library | favorites | recent | settings
   query: '',
+  tagFilter: [],        // выбранные теги (в нижнем регистре): остаются игры, у которых есть все
   sort: 'name',         // name | added | played | playtime
   layout: 'grid',       // grid | list
   selectedId: null,
@@ -291,9 +292,133 @@ function sorted(list) {
 
 const recentGames = () => state.games.filter((g) => g.last_played).sort(byPlayed);
 
+/* ---------- Теги ---------- */
+
+const MAX_TAGS = 12;
+const MAX_TAG_LEN = 24;
+const tagKey = (t) => t.toLowerCase();
+
+/* Все теги библиотеки с числом игр. Теги с разным регистром считаются одним, показывается первый встреченный. */
+function allTags() {
+  const map = new Map();
+  for (const g of state.games) {
+    for (const t of g.tags || []) {
+      const k = tagKey(t);
+      const e = map.get(k);
+      if (e) e.count += 1; else map.set(k, { key: k, name: t, count: 1 });
+    }
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
+
+const byTags = (list) => (state.tagFilter.length
+  ? list.filter((g) => state.tagFilter.every((k) => (g.tags || []).some((t) => tagKey(t) === k)))
+  : list);
+
 function matches(list) {
   const q = state.query.trim().toLowerCase();
-  return q ? list.filter((g) => g.name.toLowerCase().includes(q)) : list;
+  return byTags(q ? list.filter((g) => g.name.toLowerCase().includes(q)) : list);
+}
+
+function tagFilterNames() {
+  const all = allTags();
+  return state.tagFilter.map((k) => (all.find((t) => t.key === k) || { name: k }).name);
+}
+
+function toggleTag(key) {
+  const i = state.tagFilter.indexOf(key);
+  if (i >= 0) state.tagFilter.splice(i, 1); else state.tagFilter.push(key);
+  if (state.view === 'settings') state.view = 'library';
+  render();
+  $('#content').scrollTop = 0;
+}
+
+function clearTagFilter() {
+  state.tagFilter = [];
+  render();
+}
+
+function renderTagsBlock() {
+  const box = $('#tagsBlock');
+  const tags = allTags();
+  state.tagFilter = state.tagFilter.filter((k) => tags.some((t) => t.key === k));   // тег пропал из библиотеки: фильтр по нему снимается сам
+  box.hidden = !tags.length;
+  if (!tags.length) { box.replaceChildren(); return; }
+  box.replaceChildren(
+    h('div', { class: 'tags-head' },
+      h('span', {}, 'Теги'),
+      state.tagFilter.length ? h('button', { class: 'tags-reset', type: 'button', onClick: clearTagFilter }, 'Сбросить') : null),
+    h('div', { class: 'tags-list' }, tags.map((t) => h('button', {
+      class: `tag-item${state.tagFilter.includes(t.key) ? ' active' : ''}`, type: 'button',
+      title: 'Правая кнопка: переименовать или удалить тег',
+      onClick: () => toggleTag(t.key),
+      onContextmenu: (e) => openTagMenu(e, t),
+    }, h('span', { class: 'tag-name' }, t.name), h('span', { class: 'tag-count' }, String(t.count))))));
+}
+
+/* Меню тега: переименовать или удалить во всех играх. */
+function openTagMenu(e, tag) {
+  e.preventDefault();
+  e.stopPropagation();
+  const m = $('#menu');
+  const item = (cls, ic, label, fn) =>
+    h('button', { class: cls, type: 'button', onClick: () => { closeMenu(); fn(); } }, icon(ic), label);
+  m.replaceChildren(
+    item('', 'edit', 'Переименовать', () => renameTagModal(tag)),
+    h('hr'),
+    item('danger', 'trash', 'Удалить тег', () => deleteTag(tag)));
+  m.hidden = false;
+  menuTrigger = null;
+  const { width, height } = m.getBoundingClientRect();
+  m.style.left = `${Math.max(8, Math.min(e.clientX, window.innerWidth - width - 8))}px`;
+  m.style.top = `${Math.max(8, Math.min(e.clientY, window.innerHeight - height - 8))}px`;
+}
+
+async function applyTagRename(from, to) {
+  const changed = await invoke('rename_tag', { from, to });
+  changed.forEach(upsert);
+  // Активный фильтр по этому тегу переезжает на новое имя (или пропадает при удалении).
+  const fk = tagKey(from);
+  const nk = tagKey(to.trim().slice(0, MAX_TAG_LEN).trim());
+  state.tagFilter = [...new Set(state.tagFilter.map((k) => (k === fk ? nk : k)).filter(Boolean))];
+  render();
+  return changed.length;
+}
+
+function renameTagModal(tag) {
+  openModal((modal) => {
+    modal.style.maxWidth = '440px';
+    const input = h('input', { class: 'input', type: 'text', value: tag.name, maxlength: MAX_TAG_LEN, spellcheck: false });
+    const error = h('div', { class: 'form-error', hidden: true });
+    const save = async () => {
+      const to = input.value.trim();
+      if (!to) { error.textContent = 'Введите новое имя тега.'; error.hidden = false; return; }
+      try {
+        await applyTagRename(tag.name, to);
+        closeModal();
+        toast('Тег переименован');
+      } catch (e2) { error.textContent = errText(e2); error.hidden = false; }
+    };
+    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save(); } });
+    modal.append(
+      h('div', { class: 'modal-head' }, h('h3', {}, 'Переименовать тег'), h('button', { class: 'x-btn', type: 'button', title: 'Закрыть', onClick: closeModal }, icon('close'))),
+      h('p', {}, `Новое имя получат все игры с тегом «${tag.name}» (${tag.count}). Если такой тег уже есть, они сольются.`),
+      input, error,
+      h('div', { class: 'modal-actions', style: 'margin-top:14px' },
+        h('button', { class: 'btn ghost small', type: 'button', onClick: closeModal }, 'Отмена'),
+        h('button', { class: 'btn primary small', type: 'button', onClick: save }, 'Сохранить')));
+    setTimeout(() => { input.focus(); input.select(); }, 40);
+  });
+}
+
+async function deleteTag(tag) {
+  const ok = await confirmModal({
+    title: `Удалить тег «${tag.name}»?`,
+    text: `Тег будет убран у игр: ${tag.count}. Сами игры останутся в библиотеке.`,
+    okLabel: 'Удалить',
+  });
+  if (!ok) return;
+  try { await applyTagRename(tag.name, ''); toast('Тег удалён'); } catch (e) { toast(errText(e), 'error'); }
 }
 
 /* ---------- Рендер ---------- */
@@ -307,6 +432,7 @@ function render() {
   document.querySelectorAll('.nav-item').forEach((b) =>
     b.classList.toggle('active', b.dataset.view === state.view && !state.query));
 
+  renderTagsBlock();
   content.replaceChildren();
   content.classList.remove('pad-top');
   state.heroId = null;
@@ -321,12 +447,17 @@ function render() {
     content.append(renderSettings());
   } else if (state.view === 'favorites') {
     content.classList.add('pad-top');
-    content.append(renderSimple('Избранное', state.games.filter((g) => g.favorite).sort(byName),
-      'Пока пусто', 'Нажмите «⋯» у игры и добавьте её в избранное.', false));
+    content.append(renderSimple('Избранное', byTags(state.games.filter((g) => g.favorite)).sort(byName),
+      'Пока пусто', state.tagFilter.length ? NO_TAGGED : 'Нажмите «⋯» у игры и добавьте её в избранное.', false));
   } else if (state.view === 'recent') {
     content.classList.add('pad-top');
-    content.append(renderSimple('Недавние игры', recentGames(),
-      'Вы ещё ничего не запускали', 'Здесь появятся игры, которые вы запустили из ManyGameLib.', true));
+    content.append(renderSimple('Недавние игры', byTags(recentGames()),
+      'Вы ещё ничего не запускали', state.tagFilter.length ? NO_TAGGED : 'Здесь появятся игры, которые вы запустили из ManyGameLib.', true));
+  } else if (state.tagFilter.length) {
+    content.classList.add('pad-top');
+    const found = sorted(byTags(state.games));
+    content.append(renderSimple(`Теги: ${tagFilterNames().join(' + ')} (${found.length})`, found,
+      'Нет таких игр', NO_TAGGED, false));
   } else {
     content.append(...renderLibrary());
   }
@@ -334,6 +465,8 @@ function render() {
   content.scrollTop = scroll;
   refreshLaunchButtons();
 }
+
+const NO_TAGGED = 'Нет игр со всеми выбранными тегами. Снимите тег в боковом меню.';
 
 /* Первый запуск: библиотека пуста — просим добавить первую игру. */
 function renderWelcome() {
@@ -493,7 +626,7 @@ function renderSearch() {
     h('div', { class: 'section-head' },
       h('h2', {}, `Результаты поиска (${found.length})`)));
   if (!found.length) {
-    section.append(h('div', { class: 'empty' }, h('b', {}, 'Ничего не найдено'), `По запросу «${state.query.trim()}» игр нет.`));
+    section.append(h('div', { class: 'empty' }, h('b', {}, 'Ничего не найдено'), `По запросу «${state.query.trim()}» игр нет${state.tagFilter.length ? ' среди выбранных тегов' : ''}.`));
   } else {
     section.append(h('div', { class: 'grid' }, found.map((g) => card(g, {}))));
   }
@@ -1229,6 +1362,7 @@ function openDetails(id) {
         h('dd', {}, game.playtime_sec > 0 ? formatHours(game.playtime_sec) : '—'),
         h('dt', {}, 'Добавлена'),
         h('dd', {}, formatDate(game.added_at)),
+        ...((game.tags || []).length ? [h('dt', {}, 'Теги'), h('dd', { class: 'tag-row' }, (game.tags).map((t) => h('span', { class: 'tag-pill' }, t)))] : []),
         h('dt', {}, 'Избранное'),
         h('dd', {}, game.favorite ? 'Да' : 'Нет')),
       h('div', { class: 'modal-actions split' },
@@ -1442,6 +1576,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     args: game ? game.args || '' : '',
     playtime: game && game.playtime_sec > 0 ? String(Math.round(game.playtime_sec / 36) / 100).replace('.', ',') : '',   // часы, до сотых
     playtimeTouched: false,
+    tags: game ? [...(game.tags || [])] : [],
     nameTouched: editing,
     iconTouched: false,   // пользователь сам выбирал или убирал иконку: автоиконку из файла больше не подставляем
     hero: { ...DEFAULT_HERO, ...(game ? game.hero : {}) },
@@ -1607,6 +1742,32 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     },
   }, icon('image'), 'Найти в SteamGridDB');
 
+  /* --- Теги --- */
+  const tagList = h('div', { class: 'tag-chips' });
+  const tagInput = h('input', { class: 'tag-input', type: 'text', placeholder: 'Добавить тег…', maxlength: MAX_TAG_LEN * 2, list: 'tagSuggest', spellcheck: false, autocomplete: 'off' });
+  const tagSuggest = h('datalist', { id: 'tagSuggest' }, allTags().map((t) => h('option', { value: t.name })));
+  function syncTags() {
+    tagList.replaceChildren(
+      ...st.tags.map((t) => h('span', { class: 'tag-pill removable' }, t,
+        h('button', { class: 'tag-x', type: 'button', title: 'Убрать тег', onClick: () => { st.tags = st.tags.filter((x) => x !== t); syncTags(); } }, icon('close')))),
+      tagInput);
+  }
+  function addTags(text) {
+    for (const part of String(text).split(',')) {
+      const tag = part.replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_LEN).trim();
+      if (!tag || st.tags.some((x) => tagKey(x) === tagKey(tag))) continue;
+      if (st.tags.length >= MAX_TAGS) { showError(`Не больше ${MAX_TAGS} тегов на игру.`); break; }
+      st.tags.push(tag);
+    }
+    tagInput.value = '';
+    syncTags();
+  }
+  tagInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTags(tagInput.value); tagInput.focus(); }
+    else if (e.key === 'Backspace' && !tagInput.value && st.tags.length) { st.tags.pop(); syncTags(); tagInput.focus(); }
+  });
+  tagInput.addEventListener('blur', () => { if (tagInput.value.trim()) addTags(tagInput.value); });
+
   const bannerRow = imageRow('banner', 'Широкая картинка, например 1920×620');
   const logoRow = imageRow('logo', 'PNG с прозрачным фоном (необязательно)');
   iconRow.row.insertBefore(fromFileBtn, iconRow.row.lastElementChild);
@@ -1725,6 +1886,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       args: argsField.hidden ? '' : st.args.trim(),
       playtimeSec,
       hero: { ...st.hero },
+      tags: [...st.tags],
       images: Object.fromEntries(Object.entries(st.img).map(([k, v]) => [k, { mode: v.mode, path: v.path }])),
     };
 
@@ -1758,6 +1920,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
           iconRow.row,
           h('span', { class: 'hint' }, 'Лучше всего квадрат 512×512 или вертикальная обложка 600×900. Для exe иконка берётся из самого файла, но она небольшая: своя картинка выглядит чётче. Без иконки будет цветная плитка с первой буквой.'),
           sgdbBtn))),
+    field('Теги', h('div', { class: 'tag-box', onClick: () => tagInput.focus() }, tagList, tagSuggest),
+      h('span', { class: 'hint' }, 'Например: Пройдено, В планах, Онлайн. Enter или запятая добавляют тег. По тегам можно фильтровать библиотеку в боковом меню.')),
     h('div', { class: 'hero-cfg' },
       h('div', { class: 'section-title' }, 'Верхний блок'),
       h('p', { class: 'hint' }, 'Так игра выглядит вверху библиотеки, когда она выбрана. Предпросмотр ниже обновляется сразу.'),
@@ -1772,13 +1936,14 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
 
   // Есть ли несохранённые данные (для защиты от случайного закрытия окна).
   const snap = () => JSON.stringify([
-    st.name.trim(), st.exe, st.hero, st.playtime,
+    st.name.trim(), st.exe, st.hero, st.playtime, st.tags,
     Object.values(st.img).map((v) => [v.mode === 'exe' && !st.iconTouched ? 'keep' : v.mode, v.path]), // автоиконку не считаем правкой
   ]);
   let initial = snap();
   form.isDirty = () => !st.busy && snap() !== initial;
 
   syncImages();
+  syncTags();
   syncFromFile();
   syncHero();
   updatePreview();

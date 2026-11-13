@@ -392,6 +392,7 @@ function view(g) {
     has_banner: hasImage(g.banner_file),
     has_logo: hasImage(g.logo_file),
     hero: normalizeHero(g.hero),
+    tags: cleanTags(g.tags),
     favorite: !!g.favorite,
     last_played: g.last_played ?? null,
     playtime_sec: playtimeOf(g),
@@ -423,6 +424,27 @@ function cleanName(name) {
   name = String(name || '').trim();
   if (!name) throw new Error('Введите название игры.');
   return name.slice(0, 80);
+}
+
+/* Теги игры: до 12 штук, каждый до 24 знаков, без переносов и управляющих символов.
+   Теги с разным регистром считаются одним (остаётся первый). Что угодно, кроме списка строк, даёт пустой список. */
+const MAX_TAGS = 12;
+const MAX_TAG_LEN = 24;
+
+function cleanTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const t of tags) {
+    if (typeof t !== 'string') continue;
+    const tag = t.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_LEN).trim();
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+    if (out.length >= MAX_TAGS) break;
+  }
+  return out;
 }
 
 /* Параметры запуска: одна строка, без переносов и управляющих символов, не длиннее 1000 знаков. */
@@ -759,6 +781,7 @@ function buildExport() {
       exe_path: g.exe_path,
       args: cleanArgs(g.args),
       hero: normalizeHero(g.hero),
+      tags: cleanTags(g.tags),
       favorite: !!g.favorite,
       last_played: g.last_played ?? null,
       playtime_sec: playtimeOf(g),
@@ -847,7 +870,7 @@ function mergeImport(buf) {
       }
       const num = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 && v !== null && v !== '' ? Math.floor(Number(v)) : null);
       added.push({
-        id, name, exe_path: exe, args: cleanArgs(rec.args), playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero),
+        id, name, exe_path: exe, args: cleanArgs(rec.args), playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero), tags: cleanTags(rec.tags),
         favorite: rec.favorite === true, last_played: num(rec.last_played), added_at: num(rec.added_at) ?? Date.now(),
       });
     }
@@ -1019,6 +1042,25 @@ function registerHandlers() {
   handle('sgdb_images', ({ gameId, kind }) => sgdb.images(gameId, kind));
   handle('sgdb_download', ({ url }) => sgdb.download(url));
 
+  /* Переименование тега во всех играх (to пустой: тег убирается). Если новое имя уже есть у игры, теги сливаются. */
+  handle('rename_tag', ({ from, to }) => {
+    const key = String(from || '').trim().toLowerCase();
+    if (!key) throw new Error('Не указан тег.');
+    const next = String(to == null ? '' : to);
+    const changed = [];
+    const list = games.map((g) => {
+      const tags = cleanTags(g.tags);
+      if (!tags.some((t) => t.toLowerCase() === key)) return g;
+      const updated = { ...g, tags: cleanTags(tags.flatMap((t) => (t.toLowerCase() === key ? [next] : [t]))) };
+      changed.push(updated);
+      return updated;
+    });
+    if (!changed.length) return [];
+    commit(list);
+    logLine('info', `тег «${String(from).slice(0, 24)}»: ${next.trim() ? 'переименован' : 'удалён'} в играх: ${changed.length}`);
+    return changed.map(view);
+  });
+
   handle('get_games', () => games.map(view));
 
   /* Только id игр, файлы которых не найдены (дешёвая проверка при возврате в окно). */
@@ -1045,7 +1087,7 @@ function registerHandlers() {
     return data ? `data:image/png;base64,${data.toString('base64')}` : null;
   });
 
-  handle('add_game', async ({ name, exePath, args, playtimeSec, images, hero }) => {
+  handle('add_game', async ({ name, exePath, args, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     name = cleanName(name);
     checkExe(exePath, null);
@@ -1059,7 +1101,7 @@ function registerHandlers() {
     // если исходные файлы удалят или переместят.
     const { fields, created } = applyImages(null, images, id);
     const game = {
-      id, name, exe_path: exePath, args: cleanArgs(args), playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero),
+      id, name, exe_path: exePath, args: cleanArgs(args), playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero), tags: cleanTags(tags),
       favorite: false, last_played: null, added_at: Date.now(),
     };
     try {
@@ -1071,7 +1113,7 @@ function registerHandlers() {
     return view(game);
   });
 
-  handle('update_game', async ({ id, name, exePath, args, playtimeSec, images, hero }) => {
+  handle('update_game', async ({ id, name, exePath, args, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     const old = findGame(id);
     name = cleanName(name);
@@ -1081,6 +1123,7 @@ function registerHandlers() {
     const { fields, created, obsolete } = applyImages(old, images, id);
     const next = { ...old, name, exe_path: exePath, args: cleanArgs(args), ...fields, hero: normalizeHero(hero) };
     if (playtime !== undefined) next.playtime_sec = playtime;   // не прислали: время остаётся как есть
+    if (tags !== undefined) next.tags = cleanTags(tags);        // то же для тегов
     try {
       commit(games.map((g) => (g === old ? next : g)));
     } catch (e) {
