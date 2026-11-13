@@ -16,6 +16,7 @@ manygamelib/
 ├─ games.corrupt-<date>.json        a corrupted file, kept aside (only after a problem)
 ├─ settings.json                    app settings (created on the first save)
 ├─ settings.json.bak                previous version of the settings
+├─ trash.json                       games removed from the library (see Trash)
 ├─ secrets.json                     the SteamGridDB API key, encrypted by Windows (created when you save a key, see Cover search)
 ├─ settings.corrupt-<date>.json     a corrupted settings file, kept aside (only after a problem)
 ├─ logs/
@@ -78,7 +79,16 @@ A crash during step 1 leaves the real file untouched. The rename in step 3 is at
 
 Changes that add or edit a game go through `commit(next)`: it swaps the in-memory list, saves, and if saving fails puts the old list back. Memory and disk therefore never disagree. Image files copied for the change are deleted again if the save fails (see [Images](images.md)).
 
-Simple changes (`toggle_favorite`, the `last_played` update after a launch, `remove_game`) call `saveGames()` directly.
+Simple changes (`toggle_favorite`, the `last_played` update after a launch) call `saveGames()` directly.
+
+## Trash
+
+A game removed from the library is not erased. `remove_game` appends `{ game, deleted_at }` to `trash.json` (the whole game record is kept as it was) and only then removes it from `games.json`; the image files stay in `icons/`. The order matters: if the second save fails, the game is taken out of the trash again, so a failure can never lose a game. The record is written like the library (temporary file, then rename).
+
+- **Undo and return.** The "Отменить" button in the notice and "Вернуть" in Settings → Library call `restore_game`. The trash is saved first, then the game is added back with the same id (a new one if the id is taken) and its images; an image file that has disappeared is dropped, and the game comes back without it.
+- **Deleting for good.** "Удалить навсегда" and "Очистить" call `delete_trash`: the trash is saved first, then the image files are deleted.
+- **Automatic cleanup.** At startup and after each removal, entries older than 30 days and everything beyond the newest 50 are deleted for good with their images. If the trash cannot be saved, no image is touched.
+- **Safety.** `trash.json` is not trusted: a damaged file or a record without a game id is ignored (an empty trash), it never affects `games.json`, and an image name is deleted only if it is a plain file name inside `icons/`. The trash is not part of the export ([Moving the library](transfer.md)) and not of the backups; a running game that is removed stops being counted for playtime.
 
 ## Reading and recovery
 

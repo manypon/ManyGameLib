@@ -82,7 +82,7 @@ Every launch button carries `data-launch-id`. `refreshLaunchButtons()` runs afte
 - **Context menu** (right-click or the "⋯" button): launch, favorite, details, edit, remove from library. Clicking the same "⋯" button again closes it.
 - **Add/edit form** (`gameForm`) keeps its own local state: the chosen file, the name (auto-filled from the file name until the user types their own), the launch arguments (the field is hidden for file types that do not use them), the playtime in hours (sent only if the user touched the field), the three images (the icon can come from the game's file, see [Images](images.md)) and the top-block settings. On submit it sends one `add_game` or `update_game` request. Errors come back as text and are shown inside the form.
 - **Toasts** show short results and errors.
-- **Deleting a game** asks for confirmation, and removes only the library entry.
+- **Removing a game** asks no question: the game goes to the trash ([Storage](storage.md#trash)) and a notice "«…» убрана из библиотеки" with the button "Отменить" stays for 8 seconds (`toast` with an `action`). Settings → Library has a "Корзина" card (shown only when it is not empty) with "Вернуть", "Удалить навсегда" and "Очистить". Only the library entry is affected, never the game's files.
 
 ## Dropping files into the window
 

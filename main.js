@@ -189,6 +189,57 @@ function commit(next) {
   }
 }
 
+/* ---------- Корзина ---------- */
+
+/* Убранная из библиотеки игра не стирается сразу: запись уходит в trash.json, а картинки остаются в icons/.
+   Вернуть её можно кнопкой «Отменить» в уведомлении или на вкладке «Библиотека» в настройках.
+   Через TRASH_DAYS дней (и сверх TRASH_MAX штук) самые старые записи удаляются окончательно вместе с картинками. */
+const TRASH_DAYS = 30;
+const TRASH_MAX = 50;
+let trash = [];   // [{ game, deleted_at }]
+let trashPath = '';
+
+function loadTrash() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(trashPath, 'utf8').replace(/^\uFEFF/, ''));
+    trash = Array.isArray(raw)
+      ? raw.filter((e) => e && typeof e === 'object' && e.game && typeof e.game === 'object' && typeof e.game.id === 'string' && Number.isFinite(e.deleted_at))
+      : [];
+  } catch { trash = []; }   // файла нет или он повреждён: корзина пуста, на игры это не влияет
+}
+
+function saveTrash() {
+  const tmp = trashPath + '.tmp';
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(trash, null, 2));
+    withRetry(() => fs.renameSync(tmp, trashPath));
+  } catch (e) {
+    throw new Error(`Не удалось сохранить корзину: ${e.message}`);
+  }
+}
+
+/* Файлы картинок игры. Имя из файла корзины считаем недоверенным: только простое имя внутри icons/. */
+function dropTrashImages(game) {
+  for (const field of Object.values(IMAGE_FIELDS)) {
+    const name = game[field];
+    if (typeof name === 'string' && name && path.basename(name) === name) removeImage(name);
+  }
+}
+
+function purgeTrash() {
+  const limit = Date.now() - TRASH_DAYS * 24 * 60 * 60 * 1000;
+  const fresh = trash.filter((e) => e.deleted_at >= limit).sort((a, b) => b.deleted_at - a.deleted_at);
+  const keep = fresh.slice(0, TRASH_MAX);
+  if (keep.length === trash.length) return;
+  const dropped = trash.filter((e) => !keep.includes(e));
+  const before = trash;
+  trash = keep;
+  try { saveTrash(); }
+  catch (e) { trash = before; logLine('error', e.message); return; }   // не вышло: картинки не трогаем
+  dropped.forEach((e) => dropTrashImages(e.game));
+  logLine('info', `корзина: окончательно удалено игр: ${dropped.length}`);
+}
+
 /* ---------- Настройки приложения ---------- */
 
 /* Лежат отдельно от списка игр: %USERPROFILE%\manypon\manygamelib\settings.json.
@@ -1163,11 +1214,61 @@ function registerHandlers() {
   });
 
   /* Убирает игру из библиотеки. Файлы игры на диске не трогаем. */
+  /* Игра уходит в корзину. Сначала пишем корзину, потом список: при сбое игра не пропадёт ни там, ни там. */
   handle('remove_game', ({ id }) => {
     const g = findGame(id);
-    games = games.filter((x) => x !== g);
-    saveGames();
-    Object.values(IMAGE_FIELDS).forEach((field) => removeImage(g[field]));
+    trash.push({ game: g, deleted_at: Date.now() });
+    try { saveTrash(); } catch (e) { trash.pop(); throw e; }
+    try {
+      commit(games.filter((x) => x !== g));
+    } catch (e) {
+      trash.pop();
+      try { saveTrash(); } catch { /* ignore */ }
+      throw e;
+    }
+    purgeTrash();
+    logLine('info', `убрана из библиотеки (в корзину): ${g.name}`);
+  });
+
+  handle('list_trash', () => trash.slice().sort((a, b) => b.deleted_at - a.deleted_at).map((e) => ({
+    id: e.game.id, name: String(e.game.name || ''), exe_path: String(e.game.exe_path || ''),
+    deleted_at: e.deleted_at, playtime_sec: playtimeOf(e.game),
+  })));
+
+  handle('restore_game', ({ id }) => {
+    const i = trash.findIndex((e) => e.game.id === id);
+    if (i < 0) throw new Error('Этой игры уже нет в корзине.');
+    const entry = trash[i];
+    const g = { ...entry.game };
+    let nextId = Number(g.id) || Date.now();
+    while (games.some((x) => x.id === g.id)) { nextId += 1; g.id = String(nextId); }   // id занят (игру добавили заново)
+    for (const field of Object.values(IMAGE_FIELDS)) {
+      const name = g[field];
+      if (name && !(typeof name === 'string' && path.basename(name) === name && fs.existsSync(path.join(iconsDir, name)))) g[field] = null;
+    }
+    trash.splice(i, 1);
+    try { saveTrash(); } catch (e) { trash.splice(i, 0, entry); throw e; }
+    try {
+      commit([...games, g]);
+    } catch (e) {
+      trash.splice(i, 0, entry);
+      try { saveTrash(); } catch { /* ignore */ }
+      throw e;
+    }
+    logLine('info', `возвращена из корзины: ${g.name}`);
+    return view(g);
+  });
+
+  /* Окончательно: одну игру (id) или всю корзину (без id). Картинки удаляются после того, как корзина сохранена. */
+  handle('delete_trash', ({ id }) => {
+    const gone = id ? trash.filter((e) => e.game.id === id) : trash.slice();
+    if (!gone.length) return 0;
+    const before = trash;
+    trash = trash.filter((e) => !gone.includes(e));
+    try { saveTrash(); } catch (e) { trash = before; throw e; }
+    gone.forEach((e) => dropTrashImages(e.game));
+    logLine('info', `корзина: окончательно удалено игр: ${gone.length}`);
+    return gone.length;
   });
 
   handle('pick_file', async ({ title, filters }) => {
@@ -1328,6 +1429,7 @@ if (!app.requestSingleInstanceLock()) {
     dbPath = path.join(dataDir, 'games.json');
     backupsDir = path.join(dataDir, 'backups');
     settingsPath = path.join(dataDir, 'settings.json');
+    trashPath = path.join(dataDir, 'trash.json');
     logsDir = path.join(dataDir, 'logs');
     // Не читается (занят, нет доступа)? Предлагаем повторить, с пустой библиотекой не стартуем.
     for (;;) {
@@ -1353,6 +1455,8 @@ if (!app.requestSingleInstanceLock()) {
     loadSettings();
     logLine('info', `запуск приложения v${app.getVersion()}, Electron ${process.versions.electron}, ${process.platform}`);
     if (libraryNotice) logLine('warn', libraryNotice.replace(/\n/g, ' '));
+    loadTrash();
+    purgeTrash();   // записи старше срока и сверх лимита удаляются окончательно
     // Приводим автозапуск в соответствие с настройкой (если его убрали или добавили снаружи).
     try {
       if (app.isPackaged && app.getLoginItemSettings({ args: [HIDDEN_FLAG] }).openAtLogin !== settings.autostart) applyAutostart(settings.autostart);

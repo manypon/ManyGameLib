@@ -72,7 +72,10 @@ The preload script exposes `window.api` with seven members:
 | `rename_tag` | `{ from, to }` | The views of the changed games. Renames a tag in all games (an empty `to` removes it); see [Tags](ui.md#tags) |
 | `launch_game` | `{ id }` | The game view with the new `last_played` and `running: true`; a game that is already running is returned as is |
 | `toggle_favorite` | `{ id }` | The updated game view |
-| `remove_game` | `{ id }` | nothing |
+| `remove_game` | `{ id }` | nothing. The game moves to the trash (see [Storage](storage.md#trash)) |
+| `list_trash` | none | The trash: `{ id, name, exe_path, deleted_at, playtime_sec }`, newest first |
+| `restore_game` | `{ id }` | The game view; takes the game out of the trash |
+| `delete_trash` | `{ id }` or none | The number of games deleted for good (one game, or the whole trash without `id`) |
 | `win_state` | none | `true` if the window is maximized |
 | `get_settings` | none | The settings object |
 | `save_settings` | `{ patch }` | The settings after the change |

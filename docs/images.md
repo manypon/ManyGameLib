@@ -46,7 +46,7 @@ Consistency rules:
 - If anything fails while copying (bad format, too large, copy error), every file created so far is deleted and the whole request fails. Nothing is half-applied.
 - If saving `games.json` fails after the copy, the created files are deleted (the list rolls back, see [Storage](storage.md)).
 - Obsolete files are deleted only **after** the library was saved successfully. A failed save never loses the old picture.
-- `remove_game` deletes the game's image files after saving the list. It never touches the game's own files.
+- `remove_game` does not delete the game's image files: they stay for the trash, so the game can come back with its pictures. They are deleted when the trash entry is deleted for good (see [Storage](storage.md#trash)). The game's own files are never touched.
 
 ## Icon from the game's file
 

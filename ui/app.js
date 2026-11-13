@@ -30,6 +30,7 @@ const state = {
   appInfo: null,        // сведения о приложении для вкладки «О приложении»
   update: null,         // состояние обновлений из updater.js (status, mode, version, progress, error)
   settings: null,       // настройки приложения (get_settings)
+  trash: null,          // корзина (list_trash); null: загрузить заново
   wallpaper: null,      // data URL своей картинки фона (грузится, только если она выбрана)
 };
 
@@ -138,13 +139,20 @@ function coverNode(game) {
   }, letter);
 }
 
-function toast(msg, type = 'ok') {
+/* action: { label, onClick }: кнопка в уведомлении (например, «Отменить»); с ней уведомление висит дольше. */
+function toast(msg, type = 'ok', action = null) {
   const t = h('div', { class: `toast ${type}` }, msg);
-  $('#toasts').append(t);
-  setTimeout(() => {
+  let timer = null;
+  const hide = () => {
+    clearTimeout(timer);
     t.classList.add('out');
     setTimeout(() => t.remove(), 220);
-  }, type === 'error' ? 5200 : 2800);
+  };
+  if (action) {
+    t.append(h('button', { class: 'toast-action', type: 'button', onClick: () => { hide(); action.onClick(); } }, action.label));
+  }
+  $('#toasts').append(t);
+  timer = setTimeout(hide, action ? 8000 : type === 'error' ? 5200 : 2800);
 }
 
 /* ---------- Данные ---------- */
@@ -254,22 +262,30 @@ async function toggleFavorite(id) {
   }
 }
 
+/* Без вопроса: игра уходит в корзину, а «Отменить» в уведомлении возвращает её. Сама игра на диске не затрагивается. */
 async function removeGame(id) {
   const game = state.games.find((g) => g.id === id);
   if (!game) return;
-  const ok = await confirmModal({
-    title: 'Убрать игру из библиотеки?',
-    text: `«${game.name}» исчезнет из ManyGameLib. Сама игра и её файлы на компьютере останутся нетронутыми.`,
-    okLabel: 'Убрать',
-  });
-  if (!ok) return;
   try {
     await invoke('remove_game', { id });
     state.games = state.games.filter((g) => g.id !== id);
     delete state.assets[id];
     if (state.selectedId === id) state.selectedId = null;
+    state.trash = null;   // список корзины в настройках загрузится заново
     render();
-    toast('Игра убрана из библиотеки');
+    toast(`«${game.name}» убрана из библиотеки`, 'ok', { label: 'Отменить', onClick: () => restoreGame(id) });
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+}
+
+async function restoreGame(id) {
+  try {
+    const game = await invoke('restore_game', { id });
+    upsert(game);
+    state.trash = null;
+    render();
+    toast(`«${game.name}» возвращена в библиотеку`);
   } catch (e) {
     toast(errText(e), 'error');
   }
@@ -697,6 +713,7 @@ async function loadSettings() {
     state.settings = await invoke('get_settings');
     if (state.settings.background.mode === 'custom') state.wallpaper = await invoke('get_wallpaper');
     state.sgdbKey = (await invoke('sgdb_state')).hasKey;
+    state.trash = await invoke('list_trash');
   } catch (e) {
     toast(errText(e), 'error');
   }
@@ -922,6 +939,36 @@ async function transfer(kind) {
   render();
 }
 
+/* Корзина на вкладке «Библиотека»: вернуть игру или удалить окончательно. */
+function trashCard() {
+  if (state.trash === null) {
+    invoke('list_trash').then((t) => { state.trash = t; if (state.view === 'settings') render(); }).catch(() => { state.trash = []; });
+  }
+  const list = state.trash || [];
+  if (!list.length) return null;
+  const act = async (fn) => {
+    try { await fn(); state.trash = await invoke('list_trash'); render(); } catch (e) { toast(errText(e), 'error'); }
+  };
+  const rows = list.map((t) => h('div', { class: 's-row' },
+    h('div', { class: 's-text' }, h('b', {}, t.name || 'Без названия'),
+      h('span', {}, `Убрана ${formatDate(t.deleted_at)}${t.playtime_sec > 0 ? `, наиграно ${formatHours(t.playtime_sec)}` : ''}`)),
+    h('div', { class: 's-control' },
+      h('div', { class: 's-buttons' },
+        h('button', { class: 'btn ghost small', type: 'button', onClick: () => restoreGame(t.id) }, 'Вернуть'),
+        h('button', { class: 'btn ghost small', type: 'button', onClick: () => act(() => invoke('delete_trash', { id: t.id })) }, 'Удалить навсегда')))));
+  const clear = async () => {
+    const ok = await confirmModal({
+      title: 'Очистить корзину?',
+      text: `Игры в корзине (${list.length}) и их картинки будут удалены окончательно. Сами игры на компьютере не затрагиваются.`,
+      okLabel: 'Очистить',
+    });
+    if (ok) act(() => invoke('delete_trash', {}));
+  };
+  return settingsCard('Корзина', 'Убранные из библиотеки игры хранятся 30 дней, потом удаляются окончательно',
+    ...rows,
+    settingRow('Очистить корзину', null, h('button', { class: 'btn danger small', type: 'button', onClick: clear }, icon('trash'), 'Очистить')));
+}
+
 function libraryPanel() {
   ensureAppInfo();
   const total = state.games.length;
@@ -947,6 +994,7 @@ function libraryPanel() {
         h('button', { class: 'btn ghost small', type: 'button', disabled: transferBusy || !total, onClick: () => transfer('export') }, icon('folder'), 'Экспортировать…')),
       settingRow('Импорт', 'Игры из архива добавляются к вашим, игры с тем же путём к файлу пропускаются. Открывайте только архивы, которым доверяете',
         h('button', { class: 'btn ghost small', type: 'button', disabled: transferBusy, onClick: () => transfer('import') }, icon('folder'), 'Импортировать…'))),
+    trashCard(),
     settingsCard('SteamGridDB', 'Поиск обложек, баннеров и логотипов в форме игры, кнопка «Найти в SteamGridDB»',
       sgdbRow()),
     settingsCard('Защита данных', 'Список игр хранится безопасно',
