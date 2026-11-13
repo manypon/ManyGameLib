@@ -16,6 +16,8 @@ manygamelib/
 ├─ games.corrupt-<date>.json        a corrupted file, kept aside (only after a problem)
 ├─ settings.json                    app settings (created on the first save)
 ├─ settings.json.bak                previous version of the settings
+├─ sessions.json                    journal of play sessions (see Play sessions)
+├─ profile.json                     nickname, avatar file name, start date (see Profile)
 ├─ trash.json                       games removed from the library (see Trash)
 ├─ secrets.json                     the SteamGridDB API key, encrypted by Windows (created when you save a key, see Cover search)
 ├─ settings.corrupt-<date>.json     a corrupted settings file, kept aside (only after a problem)
@@ -82,6 +84,16 @@ Changes that add or edit a game go through `commit(next)`: it swaps the in-memor
 Simple changes (`toggle_favorite`, the `last_played` update after a launch) call `saveGames()` directly.
 
 ## Trash
+
+## Play sessions
+
+`sessions.json` is an array of `{ id, name, start, sec }`: the game id, its name at that moment, the start time (ms) and the length in seconds. `history.js` appends an entry in `addPlaytime`, so exactly the sessions that count for playtime are recorded (60 seconds and longer, and only if the playtime was saved). The file holds at most 20 000 entries (the oldest are dropped) and is written like the library (temporary file, then rename). It is not trusted: bad entries are skipped, a damaged file is renamed to `sessions.corrupt-<date>.json` and the journal starts again; `games.json` is never affected. A failed write is only logged.
+
+`get_stats` builds the profile statistics from it: last 7 and 30 days (a session that crosses midnight is split between the days), a daily bar chart for 30 days, a top of games per period and day streaks. Time played before the journal existed is only in `playtime_sec` and shows in "all time". The journal is not part of the export.
+
+## Profile
+
+`profile.json` is `{ nickname, avatar, created_at }`. The nickname is cleaned (control characters removed, spaces collapsed, 24 characters). The avatar (up to 2 MB, the usual image types) is copied to `icons/`, the old one is deleted only after the new one is saved. `created_at` is set on the first start: the first journal entry or the current time. A damaged file is renamed to `profile.corrupt-<date>.json`. Nothing is sent anywhere.
 
 A game removed from the library is not erased. `remove_game` appends `{ game, deleted_at }` to `trash.json` (the whole game record is kept as it was) and only then removes it from `games.json`; the image files stay in `icons/`. The order matters: if the second save fails, the game is taken out of the trash again, so a failure can never lose a game. The record is written like the library (temporary file, then rename).
 

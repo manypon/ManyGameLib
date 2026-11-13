@@ -8,6 +8,7 @@ const path = require('path');
 const { spawn, execFile } = require('child_process');
 const { createUpdater } = require('./updater');
 const { createSgdb } = require('./sgdb');
+const { createHistory } = require('./history');
 
 const REPO_URL = 'https://github.com/manypon/ManyGameLib';
 const LICENSE_NAME = 'MIT';
@@ -33,6 +34,7 @@ let win = null;
 let updater = null;
 let sgdb = null;
 let dataDir, iconsDir, dbPath;
+let history;   // журнал сессий (sessions.json), см. history.js
 let games = [];
 
 /* Повторный запуск одной и той же игры в течение этого времени игнорируем
@@ -777,6 +779,59 @@ async function spawnGame(file, argsLine = '') {
   return null;
 }
 
+/* ---------- Профиль ---------- */
+
+/* profile.json: { nickname, avatar, created_at }. Только на этом компьютере, никуда не отправляется.
+   created_at ставится при первом обращении: «в библиотеке с…». Аватар лежит в icons/ (до 2 МБ). */
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const NICK_MAX = 24;
+let profile = { nickname: '', avatar: null, created_at: 0 };
+let profilePath;
+
+function cleanNick(v) {
+  return String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, NICK_MAX);
+}
+
+function normalizeProfile(raw) {
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const created = Number(r.created_at);
+  const avatar = typeof r.avatar === 'string' && r.avatar && path.basename(r.avatar) === r.avatar ? r.avatar : null;
+  return { nickname: cleanNick(r.nickname), avatar, created_at: Number.isFinite(created) && created > 0 ? Math.round(created) : 0 };
+}
+
+function saveProfile(next) {
+  const tmp = profilePath + '.tmp';
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
+    withRetry(() => fs.renameSync(tmp, profilePath));
+  } catch (e) {
+    throw new Error(`Не удалось сохранить профиль: ${e.message}`);
+  }
+  profile = next;
+}
+
+function loadProfile() {
+  let text;
+  try { text = fs.readFileSync(profilePath, 'utf8'); } catch { text = null; }
+  if (text !== null) {
+    try {
+      profile = normalizeProfile(JSON.parse(text.replace(/^﻿/, '')));
+    } catch (e) {
+      try { fs.renameSync(profilePath, path.join(dataDir, `profile.corrupt-${stamp()}.json`)); } catch { /* ignore */ }
+      logLine('warn', `profile.json повреждён (${e.message}), профиль начат заново`);
+      profile = normalizeProfile({});
+    }
+  }
+  if (!profile.created_at) {
+    // старейшая из известных дат: первая запись журнала или «сейчас»
+    const first = history && history.entries()[0];
+    profile = { ...profile, created_at: first ? first.start : Date.now() };
+    try { saveProfile(profile); } catch (e) { logLine('warn', e.message); }
+  }
+}
+
+const profileView = () => ({ nickname: profile.nickname, created_at: profile.created_at, has_avatar: !!profile.avatar });
+
 /* ---------- Время в игре ---------- */
 
 const sessions = new Map(); // id игры -> { start }
@@ -791,12 +846,12 @@ function endSession(id) {
   const s = sessions.get(id);
   if (!s) return;
   sessions.delete(id);
-  addPlaytime(id, Math.round((Date.now() - s.start) / 1000));
+  addPlaytime(id, Math.round((Date.now() - s.start) / 1000), s.start);
   const g = games.find((x) => x.id === id);
   if (g && win && !win.isDestroyed()) win.webContents.send('game-updated', view(g)); // снять «Играет»
 }
 
-function addPlaytime(id, sec) {
+function addPlaytime(id, sec, start) {
   if (sec < MIN_SESSION_SEC) return;
   const g = games.find((x) => x.id === id);
   if (!g) return;   // игру успели убрать из библиотеки
@@ -810,6 +865,7 @@ function addPlaytime(id, sec) {
     return;
   }
   logLine('info', `время: ${g.name} +${sec} с`);
+  if (history && start) history.add({ id, name: g.name, start, sec });   // сбой журнала на время в игре не влияет
   if (win && !win.isDestroyed()) win.webContents.send('game-updated', view(g));
 }
 
@@ -1245,6 +1301,30 @@ function registerHandlers() {
     clipboard.writeText(findGame(id).exe_path);
   });
 
+  handle('get_stats', () => history.stats(games));
+
+  handle('get_profile', () => ({ ...profileView(), avatar: readImage(profile.avatar, MAX_AVATAR_BYTES) }));
+
+  handle('set_nickname', ({ nickname }) => {
+    saveProfile({ ...profile, nickname: cleanNick(nickname) });
+    return profileView();
+  });
+
+  /* Аватар: копируем в icons/, старый удаляем только после успешного сохранения. */
+  handle('set_avatar', ({ path: p }) => {
+    const name = copyImage(p, 'profile', 'avatar', MAX_AVATAR_BYTES);
+    const old = profile.avatar;
+    try { saveProfile({ ...profile, avatar: name }); } catch (e) { removeImage(name); throw e; }
+    removeImage(old);
+    return { ...profileView(), avatar: readImage(name, MAX_AVATAR_BYTES) };
+  });
+
+  handle('clear_avatar', () => {
+    const old = profile.avatar;
+    saveProfile({ ...profile, avatar: null });
+    removeImage(old);
+    return profileView();
+  });
   handle('list_trash', () => trash.slice().sort((a, b) => b.deleted_at - a.deleted_at).map((e) => ({
     id: e.game.id, name: String(e.game.name || ''), exe_path: String(e.game.exe_path || ''),
     deleted_at: e.deleted_at, playtime_sec: playtimeOf(e.game),
@@ -1470,6 +1550,10 @@ if (!app.requestSingleInstanceLock()) {
     loadSettings();
     logLine('info', `запуск приложения v${app.getVersion()}, Electron ${process.versions.electron}, ${process.platform}`);
     if (libraryNotice) logLine('warn', libraryNotice.replace(/\n/g, ' '));
+    history = createHistory({ file: path.join(dataDir, 'sessions.json'), log: logLine });
+    history.load();
+    profilePath = path.join(dataDir, 'profile.json');
+    loadProfile();
     loadTrash();
     purgeTrash();   // записи старше срока и сверх лимита удаляются окончательно
     // Приводим автозапуск в соответствие с настройкой (если его убрали или добавили снаружи).

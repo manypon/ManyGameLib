@@ -29,6 +29,7 @@
       "updater.js",
       "zip.js",
       "sgdb.js",
+      "history.js",
       "ui/**/*",
       "build/**/*",
       "!build/afterPack.js"

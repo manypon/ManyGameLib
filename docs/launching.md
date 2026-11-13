@@ -60,6 +60,7 @@ The time spent in a game is counted automatically, in `playtime_sec`.
 - **Closing ManyGameLib during a game.** The game keeps running; on exit (`before-quit`) the time up to that moment is saved. What the game is played afterwards is not counted. A crash of ManyGameLib loses the running session.
 - **Not counted at all:** games started through the Windows shell (`.lnk`, `.url`, `.bat`, `.cmd`, `.msi`, and an `.exe` that needed the UAC fallback), because there is no process to follow. Launchers that start the real game and quit are counted only as long as the launcher runs. For these the value can be set by hand.
 - **By hand.** The edit and add forms have a field "Наиграно, ч" (hours, decimals with a comma or a point). `add_game` and `update_game` accept `playtimeSec`: a number sets the value, `undefined`, `null` or an empty value leaves it as it is, and an invalid number is rejected ("Время в игре задано неверно."). The form sends the value only if the user touched the field, so the automatic value is not overwritten by the rounding of the displayed hours.
+- **Journal.** Every counted session is also written to `sessions.json` (start and length), which feeds the profile statistics ([Storage](storage.md)). Manual changes of the hours are not sessions and are not recorded.
 - **Display.** `12,5 h` style: one decimal up to 100 hours, whole hours above, "меньше 0,1 ч" for tiny values. It is shown in the top block, in the "About" window and as the sort "По времени в игре".
 
 ## Running state

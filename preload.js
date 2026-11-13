@@ -7,7 +7,7 @@ const COMMANDS = new Set([
   'add_game', 'update_game', 'launch_game', 'toggle_favorite', 'remove_game',
   'win_state', 'get_settings', 'save_settings', 'reset_settings',
   'get_app_info', 'open_external', 'get_update_state', 'file_icon', 'check_update', 'download_update', 'install_update',
-  'get_wallpaper', 'set_wallpaper', 'clear_wallpaper', 'export_library', 'import_library', 'rename_tag', 'show_in_folder', 'copy_path', 'list_trash', 'restore_game', 'delete_trash', 'sgdb_state', 'sgdb_set_key', 'sgdb_clear_key', 'sgdb_search', 'sgdb_images', 'sgdb_download',
+  'get_wallpaper', 'set_wallpaper', 'clear_wallpaper', 'export_library', 'import_library', 'rename_tag', 'show_in_folder', 'copy_path', 'get_stats', 'get_profile', 'set_nickname', 'set_avatar', 'clear_avatar', 'list_trash', 'restore_game', 'delete_trash', 'sgdb_state', 'sgdb_set_key', 'sgdb_clear_key', 'sgdb_search', 'sgdb_images', 'sgdb_download',
 ]);
 
 contextBridge.exposeInMainWorld('api', {

@@ -47,6 +47,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Tray:** the window's cross asks whether to hide the app to the tray or quit (with a "remember" checkbox, changeable in Settings). Autostart can open the app straight into the tray.
 - **Settings page:** an app background (a bundled picture, your own or none) with blur and dimming sliders, an option to turn off the top block card, autostart with Windows, an optional log file, and a custom Java path for `.jar` files. The app background can be an animated GIF (up to 40 MB).
 - **Updates:** the app checks GitHub for a newer version (can be turned off in Settings). With the installer it downloads and installs the update on your button; the portable folder only points you to the release page.
+- **Profile:** a page with your nickname, an avatar (stored only on this computer), "in the library since" date and statistics: total time, last 7 and 30 days, a top of games and a daily chart. The periods come from a journal of play sessions that is kept from this version on; time played earlier counts only in the total.
 - Supported files: `.exe`, `.jar` (runs through Java, which must be installed; the app looks for `javaw` in PATH, `JAVA_HOME`, the Windows registry and the usual Program Files folders), `.lnk` and `.url` shortcuts, plus `.bat`, `.cmd` and `.msi`. Any other file opens with the program Windows has assigned to it.
 - Games start in their own folder. If a game needs administrator rights, Windows shows the UAC prompt.
 - "Remove from library" asks nothing: the game goes to the trash for 30 days, and the notice has an "Отменить" button (Settings → Library can bring it back later or delete it for good). Your game files are never touched.
@@ -58,7 +59,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 
 - `games.json`: the list of games
 - `icons\`: copies of the icons you picked (they survive even if the original files are deleted)
-- `settings.json`: your settings (the app background copy is in `icons\`); `trash.json`: games removed in the last 30 days; `secrets.json`: the SteamGridDB key, encrypted by Windows, only if you add one; `logs\`: the log, only if you turn it on
+- `profile.json`: your nickname and avatar name; `sessions.json`: the journal of play sessions (when and how long); `settings.json`: your settings (the app background copy is in `icons\`); `trash.json`: games removed in the last 30 days; `secrets.json`: the SteamGridDB key, encrypted by Windows, only if you add one; `logs\`: the log, only if you turn it on
 - `games.json.bak`: the previous version of the list, updated on every save
 - `backups\`: one copy of the list per app start, the last 5 are kept
 - If `games.json` is corrupted, it is renamed to `games.corrupt-<date>.json` (never overwritten) and the last good copy is restored automatically, with a notice.

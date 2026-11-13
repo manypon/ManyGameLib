@@ -64,6 +64,15 @@ A game can have several tags of the user's own (for example "Пройдено", 
 - **Managing.** A right click on a tag opens "Переименовать" and "Удалить тег". Both call `rename_tag` ([Architecture](architecture.md)) once for all games, with one save and a rollback if saving fails. Renaming into an existing tag merges them. The details window also shows the game's tags.
 - **Limits.** 12 tags per game, 24 characters each. The main process cleans them again, so the page cannot store anything else.
 
+## Profile
+
+The "Профиль" page (`state.view === 'profile'`) replaces a plain statistics page. It loads `get_profile` and `get_stats` on entering and again after each finished game (`game-updated`).
+
+- **Header.** Avatar (or a letter on a colored circle), nickname (the pencil edits it in place: Enter or leaving the field saves, Esc cancels), "В библиотеке с …", buttons to choose or remove the avatar (`set_avatar`, `clear_avatar`, `set_nickname`).
+- **Tiles.** Total time, games with time, last 7 and 30 days, the current day streak (and the best one).
+- **Top of games.** A switch "7 дней / 30 дней / Всё время" with bars relative to the leader. The periods come from the session journal ([Storage](storage.md)).
+- **Chart.** Bars for the last 30 days, the hint shows the day and the time.
+
 ## Search
 
 The search field updates `state.query` after a **150 ms pause** in typing, not on every keystroke, because each update re-renders the screen. Switching section or adding a game clears the field and cancels any pending update, so an old query cannot come back. Search matches the game name, case-insensitively, as a substring.

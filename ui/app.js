@@ -20,7 +20,7 @@ const state = {
   games: [],
   assets: {},           // id -> { icon, banner, logo }: тяжёлые картинки, грузим по требованию
   heroId: null,         // игра, которая сейчас показана в верхнем блоке
-  view: 'library',      // library | favorites | recent | settings
+  view: 'library',      // library | favorites | recent | profile | settings
   query: '',
   tagFilter: [],        // выбранные теги (в нижнем регистре): остаются игры, у которых есть все
   sort: 'name',         // name | added | played | playtime
@@ -31,6 +31,9 @@ const state = {
   update: null,         // состояние обновлений из updater.js (status, mode, version, progress, error)
   settings: null,       // настройки приложения (get_settings)
   trash: null,          // корзина (list_trash); null: загрузить заново
+  profile: null,        // профиль (get_profile): ник, аватар, дата начала
+  stats: null,          // статистика (get_stats)
+  topRange: 'month',    // top игр: all | month | week
   wallpaper: null,      // data URL своей картинки фона (грузится, только если она выбрана)
 };
 
@@ -72,6 +75,7 @@ const ICON = {
   list: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"/>'),
   copy: svg('<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/>'),
+  user: svg('<circle cx="12" cy="8.5" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>'),
   folder: svg('<path d="M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/>'),
   image: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/>'),
 };
@@ -459,6 +463,9 @@ function render() {
   } else if (state.query.trim()) {
     content.classList.add('pad-top');
     content.append(renderSearch());
+  } else if (state.view === 'profile') {
+    content.classList.add('pad-top');
+    content.append(renderProfile());
   } else if (state.view === 'settings') {
     content.classList.add('pad-top');
     content.append(renderSettings());
@@ -1218,10 +1225,148 @@ function row(game, hero) {
     h('button', { class: 'r-btn play', type: 'button', title: 'Запустить', 'data-launch-id': game.id, onClick: (e) => { e.stopPropagation(); launch(game.id); } }, icon('play')));
 }
 
+/* ---------- Профиль ---------- */
+
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const dayLabel = (key) => { const [, m, d] = key.split('-').map(Number); return `${d} ${MONTHS_GEN[m - 1]}`; };
+
+/* Статистика берётся из журнала сессий; грузим при заходе на страницу и после каждой законченной игры. */
+async function loadProfileData() {
+  try {
+    const [profile, stats] = await Promise.all([invoke('get_profile'), invoke('get_stats')]);
+    state.profile = profile;
+    state.stats = stats;
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+  if (state.view === 'profile') render();
+}
+
+async function pickAvatar() {
+  try {
+    const picked = await dialog.open({
+      title: 'Выберите картинку для аватара',
+      filters: [{ name: 'Картинки', extensions: IMAGE_EXTS }, { name: 'Все файлы', extensions: ['*'] }],
+    });
+    if (!picked) return;
+    state.profile = await invoke('set_avatar', { path: picked });
+  } catch (e) {
+    toast(errText(e), 'error');
+  }
+  render();
+}
+
+async function clearAvatar() {
+  try { state.profile = await invoke('clear_avatar'); } catch (e) { toast(errText(e), 'error'); }
+  render();
+}
+
+async function saveNickname(value) {
+  try { state.profile = { ...state.profile, ...(await invoke('set_nickname', { nickname: value })) }; } catch (e) { toast(errText(e), 'error'); }
+  render();
+}
+
+function profileHead() {
+  const p = state.profile;
+  const name = p.nickname || 'Игрок';
+  const avatar = p.avatar
+    ? h('img', { class: 'pf-avatar', src: p.avatar, alt: '' })
+    : h('div', { class: 'pf-avatar pf-avatar-ph', style: `--hue:${hueOf(name)}` }, (name.trim()[0] || '?').toUpperCase());
+
+  const title = h('div', { class: 'pf-name' }, h('h2', {}, name),
+    h('button', { class: 'icon-btn', type: 'button', title: 'Изменить ник', onClick: () => editNick(title, p.nickname) }, icon('edit')));
+  return h('div', { class: 'pf-head' }, avatar,
+    h('div', { class: 'pf-info' }, title,
+      h('p', { class: 'pf-since' }, `В библиотеке с ${formatDate(p.created_at)}`),
+      h('div', { class: 'pf-actions' },
+        h('button', { class: 'btn small ghost', type: 'button', onClick: pickAvatar }, p.has_avatar ? 'Сменить аватар' : 'Выбрать аватар'),
+        p.has_avatar && h('button', { class: 'btn small ghost', type: 'button', onClick: clearAvatar }, 'Убрать'))));
+}
+
+function editNick(host, current) {
+  let done = false;
+  const finish = (save) => { if (done) return; done = true; if (save) saveNickname(input.value); else render(); };
+  const input = h('input', {
+    class: 'input pf-nick-input', type: 'text', maxlength: '24', value: current || '', placeholder: 'Ваш ник',
+    onKeydown: (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    },
+    onBlur: () => finish(true),
+  });
+  host.replaceChildren(input);
+  input.focus();
+  input.select();
+}
+
+function statTile(label, value, hint) {
+  return h('div', { class: 'pf-tile' }, h('b', {}, value), h('span', {}, label), hint && h('small', {}, hint));
+}
+
+function topGames() {
+  const st = state.stats;
+  const ranges = [['week', '7 дней'], ['month', '30 дней'], ['all', 'Всё время']];
+  const body = h('div', { class: 'pf-top' });
+  const draw = () => {
+    const rows = st.top[state.topRange];
+    body.replaceChildren();
+    if (!rows.length) {
+      body.append(h('p', { class: 'pf-empty' }, state.topRange === 'all'
+        ? 'Пока никто не играл. Запустите игру из ManyGameLib, и здесь появится время.'
+        : 'За этот период игр не было. Время по дням считается с момента, когда приложение начало записывать сессии.'));
+      return;
+    }
+    const max = rows[0].sec || 1;
+    rows.forEach((r, i) => body.append(h('div', { class: 'pf-row' },
+      h('span', { class: 'pf-rank' }, String(i + 1)),
+      h('div', { class: 'pf-bar-wrap' },
+        h('div', { class: 'pf-row-top' }, h('span', { class: 'pf-gname' }, r.name), h('span', { class: 'pf-gtime' }, formatHours(r.sec))),
+        h('div', { class: 'pf-bar' }, h('i', { style: `width:${Math.max(2, Math.round((r.sec / max) * 100))}%` }))))));
+  };
+  const seg = segmented(ranges, () => state.topRange, (v) => { state.topRange = v; draw(); });
+  draw();
+  return h('section', { class: 's-card pf-card' },
+    h('div', { class: 's-card-head pf-card-head' }, h('div', {}, h('h3', {}, 'Топ игр'), h('p', {}, 'По времени в игре')), seg.node),
+    body);
+}
+
+function dayChart() {
+  const days = state.stats.days;
+  const max = Math.max(...days.map((d) => d.sec), 1);
+  const any = days.some((d) => d.sec > 0);
+  return h('section', { class: 's-card pf-card' },
+    h('div', { class: 's-card-head' }, h('h3', {}, 'Последние 30 дней'), h('p', {}, 'Сколько вы играли в каждый день')),
+    any ? h('div', { class: 'pf-chart-wrap' },
+      h('div', { class: 'pf-chart' }, days.map((d) => h('div', {
+        class: 'pf-col', title: `${dayLabel(d.day)}: ${d.sec > 0 ? formatHours(d.sec) : 'не играли'}`,
+      }, h('i', { style: `height:${d.sec > 0 ? Math.max(3, Math.round((d.sec / max) * 100)) : 0}%` })))),
+      h('div', { class: 'pf-axis' }, h('span', {}, dayLabel(days[0].day)), h('span', {}, 'сегодня')))
+      : h('p', { class: 'pf-empty' }, 'Пока нет записанных сессий. Играйте через ManyGameLib, и здесь появится график.'));
+}
+
+function renderProfile() {
+  const section = h('section', { class: 'section pf', style: 'margin-top:0' });
+  if (!state.profile || !state.stats) {
+    section.append(h('div', { class: 'section-head' }, h('h2', {}, 'Профиль')), h('p', { class: 'pf-empty' }, 'Загрузка…'));
+    return section;
+  }
+  const st = state.stats;
+  section.append(profileHead(),
+    h('div', { class: 'pf-tiles' },
+      statTile('Всего наиграно', formatHours(st.total_sec)),
+      statTile('Игр с временем', `${st.games_played} из ${st.games}`),
+      statTile('За 7 дней', formatHours(st.week_sec)),
+      statTile('За 30 дней', formatHours(st.month_sec)),
+      statTile('Серия дней', String(st.streak_days), `лучшая: ${st.best_streak_days}`)),
+    h('div', { class: 'pf-grid' }, topGames(), dayChart()));
+  return section;
+}
+
 /* ---------- Навигация ---------- */
 
 function setView(view) {
   state.view = view;
+  if (view === 'profile') loadProfileData();
   state.query = '';
   cancelSearchDebounce();
   $('#search').value = '';
@@ -2124,7 +2269,7 @@ $('#wClose').addEventListener('click', () => appWindow.close());
 
 window.api.onWinState(setMaximized);
 // Время в игре изменилось (игра закрылась): обновляем игру и перерисовываем экран.
-window.api.onGameUpdated((g) => { upsert(g); render(); });
+window.api.onGameUpdated((g) => { upsert(g); if (state.view === 'profile') loadProfileData(); render(); });
 window.api.onUpdateState(onUpdateState);
 invoke('get_update_state').then((s) => { state.update = s; }).catch(() => {});
 invoke('win_state').then(setMaximized).catch(() => {});
