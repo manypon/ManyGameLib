@@ -11,7 +11,7 @@
 | Файл | Содержимое |
 |------|------------|
 | `manifest.json` | `app` (`ManyGameLib`), `format` (сейчас `1`), `version` приложения, `exported_at`, число игр |
-| `games.json` | Список игр: `name`, `exe_path`, `args`, `workdir`, `admin`, `hero`, `favorite`, `last_played`, `playtime_sec`, `tags`, `added_at`, а также `icon_file`, `banner_file`, `logo_file` |
+| `games.json` | Список игр: `name`, `exe_path`, `args`, `workdir`, `admin`, `note`, `status`, `hero`, `favorite`, `last_played`, `playtime_sec`, `tags`, `added_at`, а также `icon_file`, `banner_file`, `logo_file` |
 | `icons/` | Картинки игр |
 
 - id игр не экспортируются: при каждом импорте создаются новые.

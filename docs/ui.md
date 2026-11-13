@@ -74,6 +74,10 @@ The "Профиль" page (`state.view === 'profile'`) replaces a plain statisti
 - **Chart.** Bars for the last 30 days, the hint shows the day and the time.
 - **Achievements.** Below, grouped (Library, Time, Sessions, Streaks, Order, App). A received one is gold with the date and, if it came after the last visit, a "Новое" mark; a locked one is grey with the condition and a progress bar. `get_achievements` loads them, `ack_achievements` marks everything as seen. When one is received, a toast "Достижение: …" with an "Открыть" button appears (at most three at once).
 
+## Playthrough status and note
+
+A game has a status "Не начата" (default), "Играю" or "Пройдена" and a free note (see [Storage](storage.md)); both are edited in the game form (a three-way switch and a text box). A game that is "Играю" or "Пройдена" gets a small badge in the top left corner of its tile (under "Файл не найден" if both apply); "Не начата" shows nothing. The details window shows the status and the note (line breaks kept). The status is independent of tags and playtime, and nothing changes it automatically.
+
 ## Search
 
 The search field updates `state.query` after a **150 ms pause** in typing, not on every keystroke, because each update re-renders the screen. Switching section or adding a game clears the field and cancels any pending update, so an old query cannot come back. Search matches the game name, case-insensitively, as a substring.
@@ -90,7 +94,7 @@ Every launch button carries `data-launch-id`. `refreshLaunchButtons()` runs afte
 
 - **Modal windows** (add, edit, about, confirm) share one container. Escape or a click on the backdrop closes it, but if a form has unsaved input (`tryDismiss`), the window stays open and a hint is shown; the × button always closes it.
 - **Context menu** (right-click or the "⋯" button): launch, favorite, details, edit, show in folder, copy the path, remove from library. The main process takes the path for Explorer and the clipboard from the library by id; the page never passes one. Clicking the same "⋯" button again closes it.
-- **Add/edit form** (`gameForm`) keeps its own local state: the chosen file, the name (auto-filled from the file name until the user types their own), the launch arguments, the working folder and the "run as administrator" flag (these three are hidden for file types that do not use them), the playtime in hours (sent only if the user touched the field), the three images (the icon can come from the game's file, see [Images](images.md)) and the top-block settings. On submit it sends one `add_game` or `update_game` request. Errors come back as text and are shown inside the form.
+- **Add/edit form** (`gameForm`) keeps its own local state: the chosen file, the name (auto-filled from the file name until the user types their own), the launch arguments, the working folder and the "run as administrator" flag (these three are hidden for file types that do not use them), the playthrough status and the note, the playtime in hours (sent only if the user touched the field), the three images (the icon can come from the game's file, see [Images](images.md)) and the top-block settings. On submit it sends one `add_game` or `update_game` request. Errors come back as text and are shown inside the form.
 - **Toasts** show short results and errors.
 - **Removing a game** asks no question: the game goes to the trash ([Storage](storage.md#trash)) and a notice "«…» убрана из библиотеки" with the button "Отменить" stays for 8 seconds (`toast` with an `action`). Settings → Library has a "Корзина" card (shown only when it is not empty) with "Вернуть", "Удалить навсегда" and "Очистить". Only the library entry is affected, never the game's files.
 

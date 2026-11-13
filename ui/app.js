@@ -1177,6 +1177,8 @@ function cardKeys(game, hero) {
   };
 }
 
+const STATUS_LABEL = { '': 'Не начата', playing: 'Играю', completed: 'Пройдена' };
+
 function card(game, { chip = false, hero = false } = {}) {
   return h('div', {
     class: 'card' + (hero && game.id === state.selectedId ? ' selected' : ''),
@@ -1192,6 +1194,7 @@ function card(game, { chip = false, hero = false } = {}) {
       coverNode(game),
       game.missing && h('span', { class: 'miss-badge' }, 'Файл не найден'),
       game.favorite && h('span', { class: 'fav-badge', html: ICON.star }),
+      game.status && h('span', { class: 'st-badge ' + game.status }, icon(game.status === 'completed' ? 'check' : 'play'), STATUS_LABEL[game.status]),
       chip && h('span', { class: 'chip' }, icon('clock'), formatLast(game.last_played)),
       h('button', {
         class: 'play-fab', title: 'Запустить', type: 'button', 'data-launch-id': game.id,
@@ -1596,6 +1599,9 @@ function openDetails(id) {
         ...(game.args ? [h('dt', {}, 'Параметры'), h('dd', { class: 'mono' }, game.args)] : []),
         ...(game.workdir ? [h('dt', {}, 'Рабочая папка'), h('dd', { class: 'mono' }, game.workdir)] : []),
         ...(game.admin ? [h('dt', {}, 'Права'), h('dd', {}, 'Запуск от имени администратора')] : []),
+        h('dt', {}, 'Прохождение'),
+        h('dd', {}, STATUS_LABEL[game.status || '']),
+        ...(game.note ? [h('dt', {}, 'Заметка'), h('dd', { class: 'note-text' }, game.note)] : []),
         h('dt', {}, 'Наиграно'),
         h('dd', {}, game.playtime_sec > 0 ? formatHours(game.playtime_sec) : '—'),
         h('dt', {}, 'Добавлена'),
@@ -1814,6 +1820,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     args: game ? game.args || '' : '',
     workdir: game ? game.workdir || '' : '',
     admin: game ? !!game.admin : false,
+    note: game ? game.note || '' : '',
+    status: game ? game.status || '' : '',
     playtime: game && game.playtime_sec > 0 ? String(Math.round(game.playtime_sec / 36) / 100).replace('.', ',') : '',   // часы, до сотых
     playtimeTouched: false,
     tags: game ? [...(game.tags || [])] : [],
@@ -1870,6 +1878,11 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     argsInput,
     h('span', { class: 'hint' }, 'Необязательно. Через пробел, значения с пробелами в кавычках. Для .jar они идут после -jar.'));
   // Рабочая папка и запуск от администратора: тоже только для exe, com, jar.
+  const noteInput = h('textarea', {
+    class: 'input note', maxlength: '2000', rows: '3', placeholder: 'Например: остановился на третьем боссе',
+    onInput: (e) => { st.note = e.target.value; },
+  });
+  noteInput.value = st.note;
   const workdirInput = h('input', {
     class: 'input', type: 'text', readonly: true, placeholder: 'По умолчанию: папка с файлом игры', onClick: () => pickWorkdir(),
   });
@@ -2148,6 +2161,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       args: argsField.hidden ? '' : st.args.trim(),
       workdir: argsField.hidden ? '' : st.workdir,
       admin: argsField.hidden ? false : st.admin,
+      note: st.note,
+      status: st.status,
       playtimeSec,
       hero: { ...st.hero },
       tags: [...st.tags],
@@ -2186,6 +2201,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
           iconRow.row,
           h('span', { class: 'hint' }, 'Лучше всего квадрат 512×512 или вертикальная обложка 600×900. Для exe иконка берётся из самого файла, но она небольшая: своя картинка выглядит чётче. Без иконки будет цветная плитка с первой буквой.'),
           sgdbBtn))),
+    field('Прохождение', segmented([['', STATUS_LABEL['']], ['playing', STATUS_LABEL.playing], ['completed', STATUS_LABEL.completed]], () => st.status, (v) => { st.status = v; }).node),
+    field('Заметка', noteInput, h('span', { class: 'hint' }, 'Необязательно. Для себя: на чём остановились, что нужно сделать, какой мод поставить. До 2000 знаков.')),
     field('Теги', h('div', { class: 'tag-box', onClick: () => tagInput.focus() }, tagList, tagSuggest),
       h('span', { class: 'hint' }, 'Например: Пройдено, В планах, Онлайн. Enter или запятая добавляют тег. По тегам можно фильтровать библиотеку в боковом меню.')),
     h('div', { class: 'hero-cfg' },

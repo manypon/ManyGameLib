@@ -47,6 +47,8 @@ A JSON array of game objects:
   "args": "-windowed",
   "workdir": "",
   "admin": false,
+  "note": "",
+  "status": "",
   "icon_file": "1731234567890-icon-m3k2x9.png",
   "banner_file": null,
   "logo_file": null,
@@ -67,6 +69,7 @@ A JSON array of game objects:
 - `exe_path` is an absolute path as chosen by the user.
 - `playtime_sec` is the time played, in seconds (integer, at most 100,000 hours; a missing field means 0). It is added to automatically and can be set by hand, see [Launching](launching.md).
 - `workdir` is the working folder the game is started in (empty: the folder of the file; older games may not have the field; at most 500 characters). `admin` is `true` if the game is started as administrator. Both are used only for `.exe`, `.com` and `.jar`, see [Launching](launching.md).
+- `note` is the user's own note (up to 2000 characters, line breaks kept, other control characters removed). `status` is the playthrough state: `""` (not started, the default), `"playing"` or `"completed"`; any other value becomes `""`. Older games may not have these fields.
 - `args` is the launch arguments as one string (empty by default; older games may not have the field). Line breaks and control characters are removed, at most 1000 characters.
 - Times are Unix milliseconds.
 

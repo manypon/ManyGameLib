@@ -446,6 +446,8 @@ function view(g) {
     args: cleanArgs(g.args),
     workdir: cleanWorkdir(g.workdir),
     admin: g.admin === true,
+    note: cleanNote(g.note),
+    status: cleanStatus(g.status),
     icon: readImage(g.icon_file),
     has_banner: hasImage(g.banner_file),
     has_logo: hasImage(g.logo_file),
@@ -515,6 +517,16 @@ function cleanArgs(args) {
 
 /* Строка параметров в список: слова через пробел, в двойных кавычках пробелы сохраняются.
    Незакрытая кавычка захватывает остаток строки. Строка никогда не попадает в командную оболочку. */
+/* Заметка к игре (до 2000 знаков, переносы строк сохраняются) и статус прохождения: '' (не начата), playing, completed. */
+const MAX_NOTE_LEN = 2000;
+const STATUSES = ['playing', 'completed'];
+function cleanNote(v) {
+  return String(v == null ? '' : v).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, MAX_NOTE_LEN);
+}
+function cleanStatus(v) {
+  return STATUSES.includes(v) ? v : '';
+}
+
 /* Рабочая папка игры: пустая строка значит «папка самого файла». */
 const MAX_WORKDIR_LEN = 500;
 function cleanWorkdir(v) {
@@ -1032,6 +1044,8 @@ function buildExport() {
       args: cleanArgs(g.args),
       workdir: cleanWorkdir(g.workdir),
       admin: g.admin === true,
+      note: cleanNote(g.note),
+      status: cleanStatus(g.status),
       hero: normalizeHero(g.hero),
       tags: cleanTags(g.tags),
       favorite: !!g.favorite,
@@ -1122,7 +1136,7 @@ function mergeImport(buf) {
       }
       const num = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 && v !== null && v !== '' ? Math.floor(Number(v)) : null);
       added.push({
-        id, name, exe_path: exe, args: cleanArgs(rec.args), workdir: cleanWorkdir(rec.workdir), admin: rec.admin === true, playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero), tags: cleanTags(rec.tags),
+        id, name, exe_path: exe, args: cleanArgs(rec.args), workdir: cleanWorkdir(rec.workdir), admin: rec.admin === true, note: cleanNote(rec.note), status: cleanStatus(rec.status), playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero), tags: cleanTags(rec.tags),
         favorite: rec.favorite === true, last_played: num(rec.last_played), added_at: num(rec.added_at) ?? Date.now(),
       });
     }
@@ -1341,7 +1355,7 @@ function registerHandlers() {
     return data ? `data:image/png;base64,${data.toString('base64')}` : null;
   });
 
-  handle('add_game', async ({ name, exePath, args, workdir, admin, playtimeSec, images, hero, tags }) => {
+  handle('add_game', async ({ name, exePath, args, workdir, admin, note, status, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     name = cleanName(name);
     checkExe(exePath, null);
@@ -1356,7 +1370,7 @@ function registerHandlers() {
     // если исходные файлы удалят или переместят.
     const { fields, created } = applyImages(null, images, id);
     const game = {
-      id, name, exe_path: exePath, args: cleanArgs(args), workdir: dir, admin: admin === true, playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero), tags: cleanTags(tags),
+      id, name, exe_path: exePath, args: cleanArgs(args), workdir: dir, admin: admin === true, note: cleanNote(note), status: cleanStatus(status), playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero), tags: cleanTags(tags),
       favorite: false, last_played: null, added_at: Date.now(),
     };
     try {
@@ -1368,7 +1382,7 @@ function registerHandlers() {
     return view(game);
   });
 
-  handle('update_game', async ({ id, name, exePath, args, workdir, admin, playtimeSec, images, hero, tags }) => {
+  handle('update_game', async ({ id, name, exePath, args, workdir, admin, note, status, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     const old = findGame(id);
     name = cleanName(name);
@@ -1382,6 +1396,8 @@ function registerHandlers() {
     if (tags !== undefined) next.tags = cleanTags(tags);        // то же для тегов
     if (dir !== undefined) next.workdir = dir;                  // и для рабочей папки и запуска от администратора
     if (admin !== undefined) next.admin = admin === true;
+    if (note !== undefined) next.note = cleanNote(note);
+    if (status !== undefined) next.status = cleanStatus(status);
     try {
       commit(games.map((g) => (g === old ? next : g)));
     } catch (e) {
