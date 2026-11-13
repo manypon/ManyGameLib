@@ -73,6 +73,8 @@ The preload script exposes `window.api` with seven members:
 | `launch_game` | `{ id }` | The game view with the new `last_played` and `running: true`; a game that is already running is returned as is |
 | `toggle_favorite` | `{ id }` | The updated game view |
 | `remove_game` | `{ id }` | nothing. The game moves to the trash (see [Storage](storage.md#trash)) |
+| `show_in_folder` | `{ id }` | nothing. Shows the game file in Explorer; if the file is gone but its folder exists, opens the folder; otherwise an error |
+| `copy_path` | `{ id }` | nothing. Puts the game file's path on the clipboard |
 | `list_trash` | none | The trash: `{ id, name, exe_path, deleted_at, playtime_sec }`, newest first |
 | `restore_game` | `{ id }` | The game view; takes the game out of the trash |
 | `delete_trash` | `{ id }` or none | The number of games deleted for good (one game, or the whole trash without `id`) |

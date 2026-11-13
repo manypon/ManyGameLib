@@ -71,6 +71,7 @@ const ICON = {
   grid: svg('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
   list: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"/>'),
+  copy: svg('<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/>'),
   folder: svg('<path d="M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/>'),
   image: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/>'),
 };
@@ -1268,6 +1269,9 @@ function openMenu(e, game) {
     item('', 'star', game.favorite ? 'Убрать из избранного' : 'В избранное', () => toggleFavorite(game.id)),
     item('', 'info', 'Подробнее', () => openDetails(game.id)),
     item('', 'edit', 'Изменить', () => openEditModal(game.id)),
+    h('hr'),
+    item('', 'folder', 'Показать в папке', () => invoke('show_in_folder', { id: game.id }).catch((e) => toast(errText(e), 'error'))),
+    item('', 'copy', 'Копировать путь', () => invoke('copy_path', { id: game.id }).then(() => toast('Путь скопирован')).catch((e) => toast(errText(e), 'error'))),
     h('hr'),
     item('danger', 'trash', 'Убрать из библиотеки', () => removeGame(game.id)));
   m.hidden = false;

@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeImage, Tray, Menu, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeImage, Tray, Menu, safeStorage, clipboard } = require('electron');
 const { writeZip, readZip } = require('./zip');
 const fs = require('fs');
 const os = require('os');
@@ -1228,6 +1228,21 @@ function registerHandlers() {
     }
     purgeTrash();
     logLine('info', `убрана из библиотеки (в корзину): ${g.name}`);
+  });
+
+  /* Путь берём из библиотеки по id: страница не может подсунуть чужой путь ни проводнику, ни буферу обмена. */
+  handle('show_in_folder', ({ id }) => {
+    const g = findGame(id);
+    if (isFile(g.exe_path)) { shell.showItemInFolder(g.exe_path); return; }
+    const dir = path.dirname(g.exe_path);
+    let isDir = false;
+    try { isDir = fs.statSync(dir).isDirectory(); } catch { /* нет такой папки */ }
+    if (!isDir) throw new Error(`Папка игры не найдена: ${dir}`);
+    shell.openPath(dir);   // сам файл пропал, но папка есть: открываем её
+  });
+
+  handle('copy_path', ({ id }) => {
+    clipboard.writeText(findGame(id).exe_path);
   });
 
   handle('list_trash', () => trash.slice().sort((a, b) => b.deleted_at - a.deleted_at).map((e) => ({
