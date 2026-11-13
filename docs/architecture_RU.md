@@ -51,7 +51,8 @@ Preload-скрипт отдаёт `window.api` из семи членов:
 | Член | Направление | Назначение |
 |------|-------------|------------|
 | `invoke(cmd, args)` | страница → main, запрос/ответ | Вызывает одну из команд белого списка |
-| `pickFile(opts)` | страница → main, запрос/ответ | Открывает системный диалог выбора файла (`pick_file`) |
+| `pickFile(opts)` | страница → main, запрос/ответ | Открывает системный диалог выбора файла (`pick_file`); с `folder: true` выбирает папку |
+| `onAchievement(cb)` | main → страница, событие | Список `{ id, title }` только что полученных достижений (`achievement-unlocked`) |
 | `win(action)` | страница → main, в одну сторону | `minimize`, `toggleMaximize`, `close` для собственной шапки окна |
 | `onWinState(cb)` | main → страница | Сообщает странице, развёрнуто ли окно, чтобы она нарисовала нужную кнопку |
 | `onUpdateState(cb)` | main → страница | Присылает состояние обновления (проверка, скачивание, готово…) |
@@ -69,8 +70,8 @@ Preload-скрипт отдаёт `window.api` из семи членов:
 | `get_missing` | нет | id игр, файлов которых больше нет |
 | `get_assets` | `{ id }` | `{ icon, banner, logo }` в виде data URL (или `null`) |
 | `preview_image` | `{ path }` | data URL выбранного файла до сохранения |
-| `add_game` | `{ name, exePath, args, playtimeSec, images, hero, tags }` | Представление новой игры |
-| `update_game` | `{ id, name, exePath, args, playtimeSec, images, hero, tags }` | Обновлённое представление игры; если `tags` или `playtimeSec` не присланы, остаётся сохранённое |
+| `add_game` | `{ name, exePath, args, workdir, admin, note, status, playtimeSec, images, hero, tags }` | Представление новой игры |
+| `update_game` | `{ id, name, exePath, args, workdir, admin, note, status, playtimeSec, images, hero, tags }` | Обновлённое представление игры; если `tags`, `playtimeSec`, `workdir`, `admin`, `note` или `status` не присланы, остаётся сохранённое |
 | `rename_tag` | `{ from, to }` | Представления изменённых игр. Переименовывает тег во всех играх (пустой `to` убирает его); см. [Теги](ui_RU.md#теги) |
 | `launch_game` | `{ id }` | Представление игры с новым `last_played` и `running: true`; уже идущая игра возвращается как есть |
 | `toggle_favorite` | `{ id }` | Обновлённое представление игры |
@@ -80,6 +81,13 @@ Preload-скрипт отдаёт `window.api` из семи членов:
 | `list_trash` | нет | Корзина: `{ id, name, exe_path, deleted_at, playtime_sec }`, сначала новые |
 | `restore_game` | `{ id }` | Представление игры; достаёт игру из корзины |
 | `delete_trash` | `{ id }` или нет | Число окончательно удалённых игр (одна игра или вся корзина без `id`) |
+| `get_stats` | нет | Статистика по журналу сессий: итоги, последние 7 и 30 дней, 30 значений по дням, топ игр, серии (см. [Хранилище](storage_RU.md#игровые-сессии)) |
+| `get_profile` | нет | `{ nickname, created_at, has_avatar, avatar }`, аватар как data URL или `null` |
+| `set_nickname` | `{ nickname }` | Профиль без данных аватара |
+| `set_avatar` | `{ path }` | Профиль с новым аватаром; старый файл удаляется |
+| `clear_avatar` | нет | Профиль без аватара |
+| `get_achievements` | нет | `{ items, seen }`: все достижения с `cur`, `goal`, `done` и `unlocked_at` и время последнего визита |
+| `ack_achievements` | нет | `true`; отмечает всё как просмотренное |
 | `win_state` | нет | `true`, если окно развёрнуто |
 | `get_settings` | нет | Объект настроек |
 | `save_settings` | `{ patch }` | Настройки после изменения |

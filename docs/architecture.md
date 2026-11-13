@@ -51,7 +51,8 @@ The preload script exposes `window.api` with seven members:
 | Member | Direction | Purpose |
 |--------|-----------|---------|
 | `invoke(cmd, args)` | page → main, request/response | Calls one of the whitelisted commands |
-| `pickFile(opts)` | page → main, request/response | Opens the native "open file" dialog (`pick_file`) |
+| `pickFile(opts)` | page → main, request/response | Opens the native "open file" dialog (`pick_file`); with `folder: true` it picks a folder |
+| `onAchievement(cb)` | main → page, event | A list `{ id, title }` of achievements just received (`achievement-unlocked`) |
 | `win(action)` | page → main, one-way | `minimize`, `toggleMaximize`, `close` for the custom title bar |
 | `onWinState(cb)` | main → page | Tells the page when the window is maximized/restored, so it can draw the right button |
 | `onUpdateState(cb)` | main → page | Pushes the update state (checking, downloading, ready…) |
@@ -69,8 +70,8 @@ The preload script exposes `window.api` with seven members:
 | `get_missing` | none | Ids of games whose file no longer exists |
 | `get_assets` | `{ id }` | `{ icon, banner, logo }` as data URLs (or `null`) |
 | `preview_image` | `{ path }` | Data URL for a picked file, before saving |
-| `add_game` | `{ name, exePath, args, playtimeSec, images, hero, tags }` | The new game view |
-| `update_game` | `{ id, name, exePath, args, playtimeSec, images, hero, tags }` | The updated game view; a missing `tags` or `playtimeSec` leaves the stored value |
+| `add_game` | `{ name, exePath, args, workdir, admin, note, status, playtimeSec, images, hero, tags }` | The new game view |
+| `update_game` | `{ id, name, exePath, args, workdir, admin, note, status, playtimeSec, images, hero, tags }` | The updated game view; a missing `tags`, `playtimeSec`, `workdir`, `admin`, `note` or `status` leaves the stored value |
 | `rename_tag` | `{ from, to }` | The views of the changed games. Renames a tag in all games (an empty `to` removes it); see [Tags](ui.md#tags) |
 | `launch_game` | `{ id }` | The game view with the new `last_played` and `running: true`; a game that is already running is returned as is |
 | `toggle_favorite` | `{ id }` | The updated game view |
@@ -80,6 +81,13 @@ The preload script exposes `window.api` with seven members:
 | `list_trash` | none | The trash: `{ id, name, exe_path, deleted_at, playtime_sec }`, newest first |
 | `restore_game` | `{ id }` | The game view; takes the game out of the trash |
 | `delete_trash` | `{ id }` or none | The number of games deleted for good (one game, or the whole trash without `id`) |
+| `get_stats` | none | Statistics from the session journal: totals, last 7 and 30 days, 30 daily values, top games, streaks (see [Storage](storage.md#play-sessions)) |
+| `get_profile` | none | `{ nickname, created_at, has_avatar, avatar }`, the avatar as a data URL or `null` |
+| `set_nickname` | `{ nickname }` | The profile without the avatar data |
+| `set_avatar` | `{ path }` | The profile with the new avatar; the old file is deleted |
+| `clear_avatar` | none | The profile without an avatar |
+| `get_achievements` | none | `{ items, seen }`: every achievement with `cur`, `goal`, `done` and `unlocked_at`, and the time of the last visit |
+| `ack_achievements` | none | `true`; marks everything as seen |
 | `win_state` | none | `true` if the window is maximized |
 | `get_settings` | none | The settings object |
 | `save_settings` | `{ patch }` | The settings after the change |
