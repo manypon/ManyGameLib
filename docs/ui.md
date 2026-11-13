@@ -72,6 +72,7 @@ The "Профиль" page (`state.view === 'profile'`) replaces a plain statisti
 - **Tiles.** Total time, games with time, last 7 and 30 days, the current day streak (and the best one).
 - **Top of games.** A switch "7 дней / 30 дней / Всё время" with bars relative to the leader. The periods come from the session journal ([Storage](storage.md)).
 - **Chart.** Bars for the last 30 days, the hint shows the day and the time.
+- **Achievements.** Below, grouped (Library, Time, Sessions, Streaks, Order, App). A received one is gold with the date and, if it came after the last visit, a "Новое" mark; a locked one is grey with the condition and a progress bar. `get_achievements` loads them, `ack_achievements` marks everything as seen. When one is received, a toast "Достижение: …" with an "Открыть" button appears (at most three at once).
 
 ## Search
 

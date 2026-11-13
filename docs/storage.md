@@ -93,7 +93,11 @@ Simple changes (`toggle_favorite`, the `last_played` update after a launch) call
 
 ## Profile
 
-`profile.json` is `{ nickname, avatar, created_at }`. The nickname is cleaned (control characters removed, spaces collapsed, 24 characters). The avatar (up to 2 MB, the usual image types) is copied to `icons/`, the old one is deleted only after the new one is saved. `created_at` is set on the first start: the first journal entry or the current time. A damaged file is renamed to `profile.corrupt-<date>.json`. Nothing is sent anywhere.
+`profile.json` is `{ nickname, avatar, created_at, achievements, counters, ach_seen }`. `achievements` maps an achievement id to the time it was received, `counters` counts actions the journal cannot see (`tray`, `export`, `import`, `restore`, `sgdb`), `ach_seen` is the time the profile page was last opened (what was received later is shown as "Новое"). The nickname is cleaned (control characters removed, spaces collapsed, 24 characters). The avatar (up to 2 MB, the usual image types) is copied to `icons/`, the old one is deleted only after the new one is saved. `created_at` is set on the first start: the first journal entry or the current time. A damaged file is renamed to `profile.corrupt-<date>.json`. Nothing is sent anywhere.
+
+### Achievements
+
+`achievements.js` holds the built-in set (28): each has an `id`, a group, a title, a condition text, a `goal` and a function `cur(ctx)` over the library, the statistics from the journal, the profile and the counters. It is received when `cur >= goal`. `main.js` checks them (with a 100 ms delay, once for many calls) after every library save, after a counted session, after a nickname or avatar change and after a counter changes. New ones are written to `profile.json` and sent to the page as the `achievement-unlocked` event. The first check after this feature appeared only records what is already done, without notices and without "Новое", so an old library does not produce a flood of toasts. A broken condition counts as 0 and does not affect the others.
 
 A game removed from the library is not erased. `remove_game` appends `{ game, deleted_at }` to `trash.json` (the whole game record is kept as it was) and only then removes it from `games.json`; the image files stay in `icons/`. The order matters: if the second save fails, the game is taken out of the trash again, so a failure can never lose a game. The record is written like the library (temporary file, then rename).
 

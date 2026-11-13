@@ -22,6 +22,7 @@ ManyGameLib is a small Electron app with three parts and one runtime dependency 
 | `updater.js` | main | Update check, download and install (loaded by `main.js`) |
 | `sgdb.js` | main | Cover search in SteamGridDB, the encrypted API key (loaded by `main.js`, see [Cover search](sgdb.md)) |
 | `history.js` | main | Journal of play sessions (`sessions.json`) and the profile statistics (loaded by `main.js`, see [Storage](storage.md)) |
+| `achievements.js` | main | The built-in set of achievements and their conditions (loaded by `main.js`, see [Storage](storage.md)) |
 | `zip.js` | main | Reading and writing ZIP for library export and import (loaded by `main.js`, see [Moving the library](transfer.md)) |
 | `main.js` | main | Library storage, backups, settings, logging, autostart, image copies, launching games, native dialogs, the window, the tray icon |
 | `preload.js` | preload (isolated) | Exposes `window.api` to the page with a fixed set of commands |

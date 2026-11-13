@@ -33,6 +33,7 @@ const state = {
   trash: null,          // корзина (list_trash); null: загрузить заново
   profile: null,        // профиль (get_profile): ник, аватар, дата начала
   stats: null,          // статистика (get_stats)
+  ach: null,            // достижения (get_achievements): { items, seen }
   topRange: 'month',    // top игр: all | month | week
   wallpaper: null,      // data URL своей картинки фона (грузится, только если она выбрана)
 };
@@ -65,6 +66,8 @@ const ICON = {
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.1"/>'),
   more: svg('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>', 'style="fill:currentColor;stroke:none"'),
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  lock: svg('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+  check: svg('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
   star: svg('<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/>'),
   clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
   trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/>'),
@@ -1233,9 +1236,11 @@ const dayLabel = (key) => { const [, m, d] = key.split('-').map(Number); return 
 /* Статистика берётся из журнала сессий; грузим при заходе на страницу и после каждой законченной игры. */
 async function loadProfileData() {
   try {
-    const [profile, stats] = await Promise.all([invoke('get_profile'), invoke('get_stats')]);
+    const [profile, stats, ach] = await Promise.all([invoke('get_profile'), invoke('get_stats'), invoke('get_achievements')]);
     state.profile = profile;
     state.stats = stats;
+    state.ach = ach;
+    if (state.view === 'profile') invoke('ack_achievements').catch(() => {});   // всё показанное больше не «Новое»
   } catch (e) {
     toast(errText(e), 'error');
   }
@@ -1344,6 +1349,39 @@ function dayChart() {
       : h('p', { class: 'pf-empty' }, 'Пока нет записанных сессий. Играйте через ManyGameLib, и здесь появится график.'));
 }
 
+const ACH_TIME = new Set(['h_1', 'h_10', 'h_100', 'h_500', 'h_1000', 'fav_game', 'marathon']);
+
+function achProgress(a) {
+  return ACH_TIME.has(a.id) ? `${formatHours(a.cur)} из ${formatHours(a.goal)}` : `${a.cur} из ${a.goal}`;
+}
+
+function achCard(a, seen) {
+  const done = !!a.unlocked_at || a.done;
+  const fresh = done && a.unlocked_at && a.unlocked_at > seen;
+  return h('div', { class: 'ach' + (done ? ' done' : ' locked') },
+    h('div', { class: 'ach-ico' }, icon(done ? 'check' : 'lock')),
+    h('div', { class: 'ach-body' },
+      h('div', { class: 'ach-title' }, a.title, fresh && h('em', {}, 'Новое')),
+      h('div', { class: 'ach-desc' }, a.desc),
+      done
+        ? h('div', { class: 'ach-meta' }, a.unlocked_at ? `Получено ${formatDate(a.unlocked_at)}` : 'Получено')
+        : h('div', { class: 'ach-prog' },
+          h('div', { class: 'pf-bar' }, h('i', { style: `width:${Math.round((a.cur / a.goal) * 100)}%` })),
+          h('span', {}, achProgress(a)))));
+}
+
+function achievementsBlock() {
+  if (!state.ach) return null;
+  const { items, seen } = state.ach;
+  const got = items.filter((a) => a.unlocked_at || a.done).length;
+  const groups = [...new Set(items.map((a) => a.group))];
+  return h('section', { class: 'pf-ach' },
+    h('div', { class: 'section-head' }, h('h2', {}, 'Достижения'), h('span', { class: 'pf-since' }, `Получено ${got} из ${items.length}`)),
+    groups.map((g) => h('div', { class: 'ach-group' },
+      h('h4', {}, g),
+      h('div', { class: 'ach-grid' }, items.filter((a) => a.group === g).map((a) => achCard(a, seen))))));
+}
+
 function renderProfile() {
   const section = h('section', { class: 'section pf', style: 'margin-top:0' });
   if (!state.profile || !state.stats) {
@@ -1358,7 +1396,8 @@ function renderProfile() {
       statTile('За 7 дней', formatHours(st.week_sec)),
       statTile('За 30 дней', formatHours(st.month_sec)),
       statTile('Серия дней', String(st.streak_days), `лучшая: ${st.best_streak_days}`)),
-    h('div', { class: 'pf-grid' }, topGames(), dayChart()));
+    h('div', { class: 'pf-grid' }, topGames(), dayChart()),
+    achievementsBlock());
   return section;
 }
 
@@ -2269,6 +2308,11 @@ $('#wClose').addEventListener('click', () => appWindow.close());
 
 window.api.onWinState(setMaximized);
 // Время в игре изменилось (игра закрылась): обновляем игру и перерисовываем экран.
+window.api.onAchievement((list) => {
+  list.slice(0, 3).forEach((a) => toast(`Достижение: ${a.title}`, 'ok', { label: 'Открыть', onClick: () => setView('profile') }));
+  if (list.length > 3) toast(`И ещё достижений: ${list.length - 3}`);
+  if (state.view === 'profile') loadProfileData();
+});
 window.api.onGameUpdated((g) => { upsert(g); if (state.view === 'profile') loadProfileData(); render(); });
 window.api.onUpdateState(onUpdateState);
 invoke('get_update_state').then((s) => { state.update = s; }).catch(() => {});

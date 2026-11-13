@@ -9,6 +9,7 @@ const { spawn, execFile } = require('child_process');
 const { createUpdater } = require('./updater');
 const { createSgdb } = require('./sgdb');
 const { createHistory } = require('./history');
+const { evaluate: evalAchievements, COUNTERS } = require('./achievements');
 
 const REPO_URL = 'https://github.com/manypon/ManyGameLib';
 const LICENSE_NAME = 'MIT';
@@ -176,6 +177,7 @@ function saveGames() {
   } catch (e) {
     throw new Error(`Не удалось сохранить библиотеку: ${e.message}`);
   }
+  scheduleAchievements();
 }
 
 /* Заменяет список игр и сохраняет его на диск. Если запись не удалась,
@@ -785,7 +787,7 @@ async function spawnGame(file, argsLine = '') {
    created_at ставится при первом обращении: «в библиотеке с…». Аватар лежит в icons/ (до 2 МБ). */
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const NICK_MAX = 24;
-let profile = { nickname: '', avatar: null, created_at: 0 };
+let profile = { nickname: '', avatar: null, created_at: 0, achievements: {}, counters: {}, ach_seen: 0 };
 let profilePath;
 
 function cleanNick(v) {
@@ -796,7 +798,17 @@ function normalizeProfile(raw) {
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const created = Number(r.created_at);
   const avatar = typeof r.avatar === 'string' && r.avatar && path.basename(r.avatar) === r.avatar ? r.avatar : null;
-  return { nickname: cleanNick(r.nickname), avatar, created_at: Number.isFinite(created) && created > 0 ? Math.round(created) : 0 };
+  const achievements = {};
+  if (r.achievements && typeof r.achievements === 'object' && !Array.isArray(r.achievements)) {
+    for (const [id, ts] of Object.entries(r.achievements)) if (Number.isFinite(Number(ts)) && Number(ts) > 0) achievements[id] = Math.round(Number(ts));
+  }
+  const counters = {};
+  for (const c of COUNTERS) { const n = Math.round(Number(r.counters && r.counters[c])); if (Number.isFinite(n) && n > 0) counters[c] = Math.min(n, 1e9); }
+  const seen = Number(r.ach_seen);
+  return {
+    nickname: cleanNick(r.nickname), avatar, created_at: Number.isFinite(created) && created > 0 ? Math.round(created) : 0,
+    achievements, counters, ach_seen: Number.isFinite(seen) && seen > 0 ? Math.round(seen) : 0,
+  };
 }
 
 function saveProfile(next) {
@@ -828,6 +840,51 @@ function loadProfile() {
     profile = { ...profile, created_at: first ? first.start : Date.now() };
     try { saveProfile(profile); } catch (e) { logLine('warn', e.message); }
   }
+}
+
+/* ---------- Достижения ---------- */
+
+/* Проверка идёт с небольшой задержкой и не чаще одного раза за раз: её вызывают из многих мест (сохранение библиотеки, сессии, счётчики).
+   Первая проверка после появления достижений только записывает уже выполненные, без уведомлений и без отметки «Новое». */
+let achTimer = null;
+
+function achContext() {
+  return { games, stats: history.stats(games), profile, counters: profile.counters };
+}
+
+function checkAchievements() {
+  if (!history || !profilePath) return;
+  try {
+    const now = Date.now();
+    const done = evalAchievements(achContext()).filter((a) => a.done && !profile.achievements[a.id]);
+    const first = !profile.ach_seen;
+    if (!done.length && !first) return;
+    const achievements = { ...profile.achievements };
+    for (const a of done) achievements[a.id] = now;
+    saveProfile({ ...profile, achievements, ach_seen: first ? now : profile.ach_seen });
+    if (!first && done.length) {
+      logLine('info', `достижения: ${done.map((a) => a.title).join(', ')}`);
+      if (win && !win.isDestroyed()) win.webContents.send('achievement-unlocked', done.map((a) => ({ id: a.id, title: a.title })));
+    }
+  } catch (e) {
+    logLine('warn', `достижения не проверены: ${e.message}`);
+  }
+}
+
+function scheduleAchievements() {
+  if (achTimer) return;
+  achTimer = setTimeout(() => { achTimer = null; checkAchievements(); }, 100);
+  if (achTimer.unref) achTimer.unref();
+}
+
+function bump(counter) {
+  if (!profilePath) return;
+  try {
+    saveProfile({ ...profile, counters: { ...profile.counters, [counter]: (profile.counters[counter] || 0) + 1 } });
+  } catch (e) {
+    logLine('warn', e.message);
+  }
+  scheduleAchievements();
 }
 
 const profileView = () => ({ nickname: profile.nickname, created_at: profile.created_at, has_avatar: !!profile.avatar });
@@ -865,7 +922,7 @@ function addPlaytime(id, sec, start) {
     return;
   }
   logLine('info', `время: ${g.name} +${sec} с`);
-  if (history && start) history.add({ id, name: g.name, start, sec });   // сбой журнала на время в игре не влияет
+  if (history && start) { history.add({ id, name: g.name, start, sec }); scheduleAchievements(); }   // сбой журнала на время в игре не влияет
   if (win && !win.isDestroyed()) win.webContents.send('game-updated', view(g));
 }
 
@@ -1112,6 +1169,7 @@ function registerHandlers() {
       throw new Error(`Не удалось сохранить архив: ${e.message}`);
     }
     logLine('info', `экспорт: ${games.length} игр в ${target}`);
+    bump('export');
     return { count: games.length, path: target };
   });
 
@@ -1138,6 +1196,7 @@ function registerHandlers() {
     } catch { /* копия не критична */ }
     const result = mergeImport(buf);
     logLine('info', `импорт: добавлено ${result.added}, пропущено ${result.skipped}, без картинки ${result.imagesLost} (${file})`);
+    if (result.added > 0) bump('import');
     return result;
   });
 
@@ -1147,7 +1206,7 @@ function registerHandlers() {
   handle('sgdb_clear_key', () => sgdb.clearKey());
   handle('sgdb_search', ({ term }) => sgdb.search(term));
   handle('sgdb_images', ({ gameId, kind }) => sgdb.images(gameId, kind));
-  handle('sgdb_download', ({ url }) => sgdb.download(url));
+  handle('sgdb_download', async ({ url }) => { const r = await sgdb.download(url); bump('sgdb'); return r; });
 
   /* Переименование тега во всех играх (to пустой: тег убирается). Если новое имя уже есть у игры, теги сливаются. */
   handle('rename_tag', ({ from, to }) => {
@@ -1305,8 +1364,21 @@ function registerHandlers() {
 
   handle('get_profile', () => ({ ...profileView(), avatar: readImage(profile.avatar, MAX_AVATAR_BYTES) }));
 
+  /* Список достижений для страницы. seen: время прошлого просмотра (всё, что получено позже, это «Новое»). */
+  handle('get_achievements', () => {
+    checkAchievements();
+    const items = evalAchievements(achContext()).map((a) => ({ ...a, unlocked_at: profile.achievements[a.id] || null }));
+    return { items, seen: profile.ach_seen };
+  });
+
+  handle('ack_achievements', () => {
+    if (profilePath && Date.now() > profile.ach_seen) saveProfile({ ...profile, ach_seen: Date.now() });
+    return true;
+  });
+
   handle('set_nickname', ({ nickname }) => {
     saveProfile({ ...profile, nickname: cleanNick(nickname) });
+    scheduleAchievements();
     return profileView();
   });
 
@@ -1316,6 +1388,7 @@ function registerHandlers() {
     const old = profile.avatar;
     try { saveProfile({ ...profile, avatar: name }); } catch (e) { removeImage(name); throw e; }
     removeImage(old);
+    scheduleAchievements();
     return { ...profileView(), avatar: readImage(name, MAX_AVATAR_BYTES) };
   });
 
@@ -1351,6 +1424,7 @@ function registerHandlers() {
       throw e;
     }
     logLine('info', `возвращена из корзины: ${g.name}`);
+    bump('restore');
     return view(g);
   });
 
@@ -1424,6 +1498,7 @@ function hideToTray() {
     }
   }
   win.hide();
+  bump('tray');
   logLine('info', 'окно свёрнуто в трей');
   return true;
 }
@@ -1554,6 +1629,7 @@ if (!app.requestSingleInstanceLock()) {
     history.load();
     profilePath = path.join(dataDir, 'profile.json');
     loadProfile();
+    scheduleAchievements();
     loadTrash();
     purgeTrash();   // записи старше срока и сверх лимита удаляются окончательно
     // Приводим автозапуск в соответствие с настройкой (если его убрали или добавили снаружи).

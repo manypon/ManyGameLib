@@ -30,6 +30,7 @@
       "zip.js",
       "sgdb.js",
       "history.js",
+      "achievements.js",
       "ui/**/*",
       "build/**/*",
       "!build/afterPack.js"
