@@ -42,6 +42,7 @@ let games = [];
    (на случай двойного нажатия). */
 const LAUNCH_LOCK_MS = 3000;
 const launchedAt = new Map(); // id игры -> когда её запустили
+const launching = new Set();   // игры, запуск которых ещё идёт
 
 /* ---------- Хранилище ---------- */
 
@@ -443,6 +444,8 @@ function view(g) {
     name: g.name,
     exe_path: g.exe_path,
     args: cleanArgs(g.args),
+    workdir: cleanWorkdir(g.workdir),
+    admin: g.admin === true,
     icon: readImage(g.icon_file),
     has_banner: hasImage(g.banner_file),
     has_logo: hasImage(g.logo_file),
@@ -512,6 +515,23 @@ function cleanArgs(args) {
 
 /* Строка параметров в список: слова через пробел, в двойных кавычках пробелы сохраняются.
    Незакрытая кавычка захватывает остаток строки. Строка никогда не попадает в командную оболочку. */
+/* Рабочая папка игры: пустая строка значит «папка самого файла». */
+const MAX_WORKDIR_LEN = 500;
+function cleanWorkdir(v) {
+  return String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_WORKDIR_LEN);
+}
+
+function isDir(p) {
+  try { return fs.statSync(p).isDirectory(); } catch { return false; }
+}
+
+/* При сохранении формы: папка должна существовать (при импорте на другом компьютере её может не быть, там не проверяем). */
+function checkWorkdir(v) {
+  const dir = cleanWorkdir(v);
+  if (dir && !isDir(dir)) throw new Error('Рабочая папка не найдена. Выберите существующую папку или очистите поле.');
+  return dir;
+}
+
 function parseArgs(str) {
   const out = [];
   let cur = '';
@@ -655,6 +675,64 @@ function spawnProcess(cmd, args, cwd) {
   });
 }
 
+/* Запуск от имени администратора. Напрямую из Node с повышением прав не запустить, поэтому просим PowerShell:
+   Start-Process -Verb RunAs показывает окно UAC. Данные (файл, папка, параметры) передаются через переменные окружения,
+   а не вставляются в текст скрипта, так что команда не может быть изменена содержимым путей и параметров.
+   PowerShell сообщает STARTED, когда игра запущена, и остаётся жить, пока она работает: его выход и есть конец сессии.
+   Код 2: запуск не удался (чаще всего окно UAC закрыли кнопкой «Нет»). */
+const ELEVATE_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
+  'try {',
+  "  $p = @{ FilePath = $env:MGL_FILE; Verb = 'RunAs'; PassThru = $true }",
+  '  if ($env:MGL_CWD) { $p.WorkingDirectory = $env:MGL_CWD }',
+  '  if ($env:MGL_ARGS) { $p.ArgumentList = $env:MGL_ARGS }',
+  '  $proc = Start-Process @p',
+  '} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }',
+  "[Console]::Out.WriteLine('STARTED')",
+  'try { if ($proc) { $proc.WaitForExit() } } catch { }',
+].join('; ');
+const ELEVATE_TIMEOUT_MS = 120 * 1000;
+
+/* Один параметр по правилам разбора командной строки Windows (CommandLineToArgvW). */
+function quoteArg(a) {
+  a = String(a);
+  if (a !== '' && !/[\s"]/.test(a)) return a;
+  return `"${a.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"`;
+}
+
+function spawnElevated(file, argv, cwd) {
+  return new Promise((resolve, reject) => {
+    const env = { ...process.env, MGL_FILE: file, MGL_CWD: cwd || '', MGL_ARGS: argv.map(quoteArg).join(' ') };
+    let child;
+    try {
+      child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', ELEVATE_SCRIPT],
+        { env, detached: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (e) { reject(e); return; }
+    let out = '';
+    let err = '';
+    let settled = false;
+    const finish = (fn, value) => { if (settled) return; settled = true; clearTimeout(timer); fn(value); };
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch { /* ignore */ }
+      finish(reject, new Error('Время ожидания запроса прав администратора истекло.'));
+    }, ELEVATE_TIMEOUT_MS);
+    child.stdout.on('data', (d) => {
+      out += d;
+      if (/STARTED/.test(out)) {
+        try { child.stdout.destroy(); child.stderr.destroy(); } catch { /* ignore */ }
+        child.unref();
+        finish(resolve, child);
+      }
+    });
+    child.stderr.on('data', (d) => { if (err.length < 2000) err += d; });
+    child.once('error', (e) => finish(reject, e.code === 'ENOENT' ? new Error('PowerShell не найден, запуск от администратора недоступен.') : e));
+    child.once('exit', () => {
+      const detail = err.split(/\r?\n/).map((x) => x.trim()).find(Boolean);
+      finish(reject, new Error(`Не удалось запустить от имени администратора. Возможно, запрос UAC отклонён${detail ? ` (${detail.slice(0, 200)})` : ''}.`));
+    });
+  });
+}
+
 /* ---------- Поиск Java для .jar ---------- */
 
 const JAVAW = 'javaw.exe';
@@ -749,10 +827,17 @@ async function findJavaw() {
    - всё остальное (lnk, bat, cmd, url, msi…): через оболочку Windows, без параметров.
    Параметры игры (args) передаются только для exe, com и jar, и всегда списком, не строкой для оболочки. */
 /* Возвращает дочерний процесс (exe, com, jar) или null, если запуск прошёл через оболочку Windows. */
-async function spawnGame(file, argsLine = '') {
+async function spawnGame(file, argsLine = '', opts = {}) {
   const ext = extOf(file);
   const argv = ARGS_TYPES.includes(ext) ? parseArgs(cleanArgs(argsLine)) : [];
-  const cwd = path.dirname(file);
+  let cwd = path.dirname(file);
+  const spawnable = ARGS_TYPES.includes(ext);
+  const workdir = spawnable ? cleanWorkdir(opts.workdir) : '';
+  if (workdir) {
+    if (!isDir(workdir)) throw new Error(`Рабочая папка не найдена: ${workdir}`);
+    cwd = workdir;
+  }
+  const admin = spawnable && opts.admin === true;
 
   if (ext === 'jar') {
     const javaw = await findJavaw();
@@ -760,11 +845,12 @@ async function spawnGame(file, argsLine = '') {
       throw new Error('Java не найдена. Установите Java (JRE 8 или новее) или задайте переменную JAVA_HOME, затем повторите.');
     }
     logLine('info', `Java: ${javaw}`);
-    try { return await spawnProcess(javaw, ['-jar', file, ...argv], cwd); }
+    try { return await (admin ? spawnElevated : spawnProcess)(javaw, ['-jar', file, ...argv], cwd); }
     catch (e) { throw new Error(`Не удалось запустить Java (${javaw}): ${e.message}`); }
   }
 
   if (ext === 'exe' || ext === 'com') {
+    if (admin) return spawnElevated(file, argv, cwd);
     try {
       return await spawnProcess(file, argv, cwd);
     } catch (e) {
@@ -944,6 +1030,8 @@ function buildExport() {
       name: g.name,
       exe_path: g.exe_path,
       args: cleanArgs(g.args),
+      workdir: cleanWorkdir(g.workdir),
+      admin: g.admin === true,
       hero: normalizeHero(g.hero),
       tags: cleanTags(g.tags),
       favorite: !!g.favorite,
@@ -1034,7 +1122,7 @@ function mergeImport(buf) {
       }
       const num = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 && v !== null && v !== '' ? Math.floor(Number(v)) : null);
       added.push({
-        id, name, exe_path: exe, args: cleanArgs(rec.args), playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero), tags: cleanTags(rec.tags),
+        id, name, exe_path: exe, args: cleanArgs(rec.args), workdir: cleanWorkdir(rec.workdir), admin: rec.admin === true, playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero), tags: cleanTags(rec.tags),
         favorite: rec.favorite === true, last_played: num(rec.last_played), added_at: num(rec.added_at) ?? Date.now(),
       });
     }
@@ -1253,10 +1341,11 @@ function registerHandlers() {
     return data ? `data:image/png;base64,${data.toString('base64')}` : null;
   });
 
-  handle('add_game', async ({ name, exePath, args, playtimeSec, images, hero, tags }) => {
+  handle('add_game', async ({ name, exePath, args, workdir, admin, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     name = cleanName(name);
     checkExe(exePath, null);
+    const dir = checkWorkdir(workdir);
     images = await prepareImages(images, exePath);
 
     let id = Date.now();
@@ -1267,7 +1356,7 @@ function registerHandlers() {
     // если исходные файлы удалят или переместят.
     const { fields, created } = applyImages(null, images, id);
     const game = {
-      id, name, exe_path: exePath, args: cleanArgs(args), playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero), tags: cleanTags(tags),
+      id, name, exe_path: exePath, args: cleanArgs(args), workdir: dir, admin: admin === true, playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero), tags: cleanTags(tags),
       favorite: false, last_played: null, added_at: Date.now(),
     };
     try {
@@ -1279,17 +1368,20 @@ function registerHandlers() {
     return view(game);
   });
 
-  handle('update_game', async ({ id, name, exePath, args, playtimeSec, images, hero, tags }) => {
+  handle('update_game', async ({ id, name, exePath, args, workdir, admin, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     const old = findGame(id);
     name = cleanName(name);
     checkExe(exePath, id);
+    const dir = workdir === undefined ? undefined : checkWorkdir(workdir);
     images = await prepareImages(images, exePath);
 
     const { fields, created, obsolete } = applyImages(old, images, id);
     const next = { ...old, name, exe_path: exePath, args: cleanArgs(args), ...fields, hero: normalizeHero(hero) };
     if (playtime !== undefined) next.playtime_sec = playtime;   // не прислали: время остаётся как есть
     if (tags !== undefined) next.tags = cleanTags(tags);        // то же для тегов
+    if (dir !== undefined) next.workdir = dir;                  // и для рабочей папки и запуска от администратора
+    if (admin !== undefined) next.admin = admin === true;
     try {
       commit(games.map((g) => (g === old ? next : g)));
     } catch (e) {
@@ -1306,18 +1398,22 @@ function registerHandlers() {
     const last = launchedAt.get(id);
     if (last && Date.now() - last < LAUNCH_LOCK_MS) return view(g); // игра только что запущена
     if (!isFile(g.exe_path)) throw new Error(`Файл игры не найден: ${g.exe_path}`);
+    if (launching.has(id)) return view(g);   // идёт запуск (например, открыто окно UAC)
     launchedAt.set(id, Date.now()); // ставим сразу, чтобы второй запрос не прошёл, пока идёт первый
+    launching.add(id);
     let child = null;
     try {
-      child = await spawnGame(g.exe_path, g.args);
+      child = await spawnGame(g.exe_path, g.args, { workdir: g.workdir, admin: g.admin });
     } catch (e) {
       launchedAt.delete(id); // не запустилась, можно пробовать снова
       throw new Error(`Не удалось запустить игру: ${e.message}`);
+    } finally {
+      launching.delete(id);
     }
     g.last_played = Date.now();
     saveGames();
     trackSession(id, child);
-    logLine('info', `запуск: ${g.name} (${g.exe_path})${cleanArgs(g.args) && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [с параметрами]' : ''}`);
+    logLine('info', `запуск: ${g.name} (${g.exe_path})${cleanArgs(g.args) && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [с параметрами]' : ''}${g.admin === true && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [от администратора]' : ''}`);
     return view(g);
   });
 
@@ -1440,11 +1536,11 @@ function registerHandlers() {
     return gone.length;
   });
 
-  handle('pick_file', async ({ title, filters }) => {
+  handle('pick_file', async ({ title, filters, folder }) => {
     const res = await dialog.showOpenDialog(win, {
       title,
-      filters: Array.isArray(filters) ? filters : undefined,
-      properties: ['openFile'],
+      filters: !folder && Array.isArray(filters) ? filters : undefined,
+      properties: [folder ? 'openDirectory' : 'openFile'],
     });
     return res.canceled || !res.filePaths.length ? null : res.filePaths[0];
   });

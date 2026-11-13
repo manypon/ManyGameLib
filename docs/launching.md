@@ -18,7 +18,7 @@ Launching is handled entirely by the main process (`spawnGame()` in `main.js`). 
 
 | Extension | Method |
 |-----------|--------|
-| `.exe`, `.com` | `spawn` the file directly with the game's launch arguments, with the game's own folder as the working directory. If that fails (for example, Windows requires elevation) and there are no arguments, fall back to the shell (`shell.openPath`), which shows the UAC prompt |
+| `.exe`, `.com` | `spawn` the file directly with the game's launch arguments, with the game's working folder (by default its own folder, see "Working folder and administrator"). With "run as administrator" it goes through PowerShell instead. If that fails (for example, Windows requires elevation) and there are no arguments, fall back to the shell (`shell.openPath`), which shows the UAC prompt |
 | `.jar` | Find `javaw.exe` (see below) and run `javaw -jar <file> <arguments>` in the file's folder |
 | everything else (`.lnk`, `.url`, `.bat`, `.cmd`, `.msi`, other files) | `shell.openPath`: the program Windows has assigned to the file type |
 
@@ -33,6 +33,17 @@ A game can have launch arguments (`args`), for example `-windowed -nolauncher`. 
 - The log records `[with arguments]` but never their content, because arguments may contain tokens.
 
 Processes are started **detached** with ignored stdio and `unref()`, so a game keeps running if ManyGameLib is closed, and its output never blocks the launcher. The working directory is the game's folder, because many games load files by relative paths.
+
+## Working folder and administrator
+
+Two optional fields of a game, used for `.exe`, `.com` and `.jar` only (hidden in the form for other types, ignored if stored).
+
+- **Working folder** (`workdir`). The folder the process starts in. Empty means the folder of the game file. The form checks that the folder exists; if it disappears later, the launch stops with "Рабочая папка не найдена" and no process is created. For a `.jar` it is the folder `javaw` starts in.
+- **Run as administrator** (`admin`). Node cannot start a process elevated, so `spawnElevated()` starts `powershell.exe` with a constant script that calls `Start-Process -Verb RunAs -PassThru`. Windows shows the UAC prompt on every launch. The file, folder and arguments are passed in environment variables (`MGL_FILE`, `MGL_CWD`, `MGL_ARGS`), never inserted into the script text, so a path or an argument cannot change the command; the arguments are quoted by the Windows rules (`quoteArg`).
+  - The script prints `STARTED` after the game is started and then waits for the game to exit, so the PowerShell process lives as long as the game does. Playtime is counted from `STARTED` to that exit, the running state and the session journal work as usual.
+  - If the prompt is declined (the script exits with code 2), the launch fails with "Не удалось запустить от имени администратора" and can be repeated at once. While the prompt is open a second launch of the same game is ignored. If there is no answer for 2 minutes, PowerShell is stopped and the launch fails.
+  - If PowerShell is not found, the launch fails with a clear message. With this option the shell fallback is not used, and arguments work (they are passed to the elevated process).
+  - The log records `[от администратора]`, never paths or arguments.
 
 ## Java for `.jar`
 
@@ -58,7 +69,7 @@ The time spent in a game is counted automatically, in `playtime_sec`.
 - **Sessions shorter than 60 seconds are ignored**, so a game that crashed at once or a launcher that opens and closes does not add noise.
 - **One session per game.** If a second copy is started while the first is still running, only the first process defines the session, so the time is not doubled.
 - **Closing ManyGameLib during a game.** The game keeps running; on exit (`before-quit`) the time up to that moment is saved. What the game is played afterwards is not counted. A crash of ManyGameLib loses the running session.
-- **Not counted at all:** games started through the Windows shell (`.lnk`, `.url`, `.bat`, `.cmd`, `.msi`, and an `.exe` that needed the UAC fallback), because there is no process to follow. Launchers that start the real game and quit are counted only as long as the launcher runs. For these the value can be set by hand.
+- **Not counted at all:** games started through the Windows shell (`.lnk`, `.url`, `.bat`, `.cmd`, `.msi`, and an `.exe` that needed the UAC fallback; with "run as administrator" the game is counted), because there is no process to follow. Launchers that start the real game and quit are counted only as long as the launcher runs. For these the value can be set by hand.
 - **By hand.** The edit and add forms have a field "Наиграно, ч" (hours, decimals with a comma or a point). `add_game` and `update_game` accept `playtimeSec`: a number sets the value, `undefined`, `null` or an empty value leaves it as it is, and an invalid number is rejected ("Время в игре задано неверно."). The form sends the value only if the user touched the field, so the automatic value is not overwritten by the rounding of the displayed hours.
 - **Journal.** Every counted session is also written to `sessions.json` (start and length), which feeds the profile statistics ([Storage](storage.md)). Manual changes of the hours are not sessions and are not recorded.
 - **Display.** `12,5 h` style: one decimal up to 100 hours, whole hours above, "меньше 0,1 ч" for tiny values. It is shown in the top block, in the "About" window and as the sort "По времени в игре".

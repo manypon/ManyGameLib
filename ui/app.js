@@ -1594,6 +1594,8 @@ function openDetails(id) {
         h('dt', {}, 'Файл игры'),
         h('dd', { class: 'mono' + (game.missing ? ' bad' : '') }, game.exe_path + (game.missing ? '  (не найден)' : '')),
         ...(game.args ? [h('dt', {}, 'Параметры'), h('dd', { class: 'mono' }, game.args)] : []),
+        ...(game.workdir ? [h('dt', {}, 'Рабочая папка'), h('dd', { class: 'mono' }, game.workdir)] : []),
+        ...(game.admin ? [h('dt', {}, 'Права'), h('dd', {}, 'Запуск от имени администратора')] : []),
         h('dt', {}, 'Наиграно'),
         h('dd', {}, game.playtime_sec > 0 ? formatHours(game.playtime_sec) : '—'),
         h('dt', {}, 'Добавлена'),
@@ -1810,6 +1812,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     name: game ? game.name : '',
     exe: game ? game.exe_path : '',
     args: game ? game.args || '' : '',
+    workdir: game ? game.workdir || '' : '',
+    admin: game ? !!game.admin : false,
     playtime: game && game.playtime_sec > 0 ? String(Math.round(game.playtime_sec / 36) / 100).replace('.', ',') : '',   // часы, до сотых
     playtimeTouched: false,
     tags: game ? [...(game.tags || [])] : [],
@@ -1865,9 +1869,31 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
   const argsField = field('Параметры запуска',
     argsInput,
     h('span', { class: 'hint' }, 'Необязательно. Через пробел, значения с пробелами в кавычках. Для .jar они идут после -jar.'));
+  // Рабочая папка и запуск от администратора: тоже только для exe, com, jar.
+  const workdirInput = h('input', {
+    class: 'input', type: 'text', readonly: true, placeholder: 'По умолчанию: папка с файлом игры', onClick: () => pickWorkdir(),
+  });
+  workdirInput.value = st.workdir;
+  async function pickWorkdir() {
+    try {
+      const picked = await dialog.open({ title: 'Выберите рабочую папку игры', folder: true });
+      if (picked) { st.workdir = picked; workdirInput.value = picked; showError(''); }
+    } catch (e) { showError(errText(e)); }
+  }
+  const workdirField = field('Рабочая папка',
+    h('div', { class: 'pick-row' },
+      workdirInput,
+      h('button', { class: 'btn ghost small', type: 'button', onClick: pickWorkdir }, 'Обзор…'),
+      h('button', { class: 'btn ghost small', type: 'button', title: 'Вернуть папку с файлом игры', onClick: () => { st.workdir = ''; workdirInput.value = ''; } }, 'Сбросить')),
+    h('span', { class: 'hint' }, 'Необязательно. Папка, в которой игра стартует (нужна тем, что ищут свои файлы по относительным путям). Если пусто, берётся папка с файлом игры.'));
+  const adminBox = checkbox('Запускать от имени администратора', () => st.admin, (v) => { st.admin = v; });
+  const adminField = h('div', { class: 'field' }, adminBox.node,
+    h('span', { class: 'hint' }, 'Windows покажет запрос UAC при каждом запуске. Время в игре при этом считается.'));
   function syncArgs() {
     const ext = (st.exe.split('.').pop() || '').toLowerCase();
     argsField.hidden = !ARGS_TYPES.includes(ext);
+    workdirField.hidden = argsField.hidden;
+    adminField.hidden = argsField.hidden;
   }
   syncArgs();
 
@@ -2120,6 +2146,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       name: st.name.trim(),
       exePath: st.exe,
       args: argsField.hidden ? '' : st.args.trim(),
+      workdir: argsField.hidden ? '' : st.workdir,
+      admin: argsField.hidden ? false : st.admin,
       playtimeSec,
       hero: { ...st.hero },
       tags: [...st.tags],
@@ -2148,6 +2176,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       h('span', { class: 'field-label' }, 'Название'),
       nameInput),
     argsField,
+    workdirField,
+    adminField,
     playtimeField,
     field('Иконка или обложка',
       h('div', { class: 'icon-row' },

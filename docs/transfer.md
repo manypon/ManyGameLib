@@ -11,7 +11,7 @@ Settings → Library → "Перенос библиотеки" saves all games t
 | File | Contents |
 |------|----------|
 | `manifest.json` | `app` (`ManyGameLib`), `format` (now `1`), `version` of the app, `exported_at`, number of games |
-| `games.json` | The list of games: `name`, `exe_path`, `args`, `hero`, `favorite`, `last_played`, `playtime_sec`, `tags`, `added_at`, and `icon_file`, `banner_file`, `logo_file` |
+| `games.json` | The list of games: `name`, `exe_path`, `args`, `workdir`, `admin`, `hero`, `favorite`, `last_played`, `playtime_sec`, `tags`, `added_at`, and `icon_file`, `banner_file`, `logo_file` |
 | `icons/` | The images of the games |
 
 - Game ids are not exported: every import creates new ones.

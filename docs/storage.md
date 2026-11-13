@@ -45,6 +45,8 @@ A JSON array of game objects:
   "name": "Hollow Knight",
   "exe_path": "D:\\Games\\HK\\hollow_knight.exe",
   "args": "-windowed",
+  "workdir": "",
+  "admin": false,
   "icon_file": "1731234567890-icon-m3k2x9.png",
   "banner_file": null,
   "logo_file": null,
@@ -64,6 +66,7 @@ A JSON array of game objects:
 - `tags` is a list of the user's own labels, see [Tags](ui.md#tags). On every read and write it is cleaned: only strings, line breaks and control characters become spaces, at most 24 characters each and 12 per game, and tags that differ only in letter case count as one (the first stays). A missing field means no tags.
 - `exe_path` is an absolute path as chosen by the user.
 - `playtime_sec` is the time played, in seconds (integer, at most 100,000 hours; a missing field means 0). It is added to automatically and can be set by hand, see [Launching](launching.md).
+- `workdir` is the working folder the game is started in (empty: the folder of the file; older games may not have the field; at most 500 characters). `admin` is `true` if the game is started as administrator. Both are used only for `.exe`, `.com` and `.jar`, see [Launching](launching.md).
 - `args` is the launch arguments as one string (empty by default; older games may not have the field). Line breaks and control characters are removed, at most 1000 characters.
 - Times are Unix milliseconds.
 
