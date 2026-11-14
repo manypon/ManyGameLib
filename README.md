@@ -40,6 +40,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Launch arguments** per game (for `.exe`, `.com` and `.jar`), for example `-windowed -nolauncher`.
 - **Cover search:** the "Найти в SteamGridDB" button in the game form finds covers, banners, logos and icons (needs your own free SteamGridDB API key, stored encrypted on your computer).
 - **Game menu:** besides launch, favorite, details and edit, it has "Показать в папке" (opens Explorer on the game file) and "Копировать путь".
+- **Status filter and notes search:** the sidebar "Статус" block filters the library by "Играю" / "Пройдена" (combines with tags), and search also looks in game notes.
 - **Tags:** give a game your own tags ("Пройдено", "В планах", "Онлайн"…) in its form; the sidebar lists them with counts, and a click filters the library (several tags: games with all of them). Right-click a tag to rename or delete it.
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.

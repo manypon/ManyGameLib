@@ -22,6 +22,7 @@ const state = {
   heroId: null,         // игра, которая сейчас показана в верхнем блоке
   view: 'library',      // library | favorites | recent | profile | settings
   query: '',
+  statusFilter: '',     // '' | 'playing' | 'completed': фильтр по статусу прохождения
   tagFilter: [],        // выбранные теги (в нижнем регистре): остаются игры, у которых есть все
   sort: 'name',         // name | added | played | playtime
   layout: 'grid',       // grid | list
@@ -335,13 +336,41 @@ function allTags() {
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
-const byTags = (list) => (state.tagFilter.length
-  ? list.filter((g) => state.tagFilter.every((k) => (g.tags || []).some((t) => tagKey(t) === k)))
-  : list);
+/* Фильтры сайдбара: статус прохождения и теги (все выбранные теги сразу). */
+const filtersOn = () => !!state.statusFilter || state.tagFilter.length > 0;
 
+const byTags = (list) => {
+  let out = list;
+  if (state.statusFilter) out = out.filter((g) => (g.status || '') === state.statusFilter);
+  if (state.tagFilter.length) out = out.filter((g) => state.tagFilter.every((k) => (g.tags || []).some((t) => tagKey(t) === k)));
+  return out;
+};
+
+/* Поиск идёт по названию и по заметке. */
 function matches(list) {
   const q = state.query.trim().toLowerCase();
-  return byTags(q ? list.filter((g) => g.name.toLowerCase().includes(q)) : list);
+  return byTags(q ? list.filter((g) => g.name.toLowerCase().includes(q) || (g.note || '').toLowerCase().includes(q)) : list);
+}
+
+function toggleStatus(key) {
+  state.statusFilter = state.statusFilter === key ? '' : key;
+  if (state.view === 'settings' || state.view === 'profile') state.view = 'library';
+  render();
+  $('#content').scrollTop = 0;
+}
+
+function renderStatusBlock() {
+  const box = $('#statusBlock');
+  const counts = { playing: 0, completed: 0 };
+  for (const g of state.games) if (counts[g.status] !== undefined) counts[g.status] += 1;
+  box.hidden = !state.games.length;
+  if (box.hidden) { box.replaceChildren(); return; }
+  box.replaceChildren(
+    h('div', { class: 'tags-head' }, h('span', {}, 'Статус'),
+      state.statusFilter ? h('button', { class: 'tags-reset', type: 'button', onClick: () => toggleStatus(state.statusFilter) }, 'Сбросить') : null),
+    h('div', { class: 'tags-list status-list' }, ['playing', 'completed'].map((k) => h('button', {
+      class: `tag-item${state.statusFilter === k ? ' active' : ''}`, type: 'button', onClick: () => toggleStatus(k),
+    }, h('span', { class: 'tag-name' }, STATUS_LABEL[k]), h('span', { class: 'tag-count' }, String(counts[k]))))));
 }
 
 function tagFilterNames() {
@@ -456,6 +485,7 @@ function render() {
   document.querySelectorAll('.nav-item').forEach((b) =>
     b.classList.toggle('active', b.dataset.view === state.view && !state.query));
 
+  renderStatusBlock();
   renderTagsBlock();
   content.replaceChildren();
   content.classList.remove('pad-top');
@@ -475,15 +505,15 @@ function render() {
   } else if (state.view === 'favorites') {
     content.classList.add('pad-top');
     content.append(renderSimple('Избранное', byTags(state.games.filter((g) => g.favorite)).sort(byName),
-      'Пока пусто', state.tagFilter.length ? NO_TAGGED : 'Нажмите «⋯» у игры и добавьте её в избранное.', false));
+      'Пока пусто', filtersOn() ? NO_TAGGED : 'Нажмите «⋯» у игры и добавьте её в избранное.', false));
   } else if (state.view === 'recent') {
     content.classList.add('pad-top');
     content.append(renderSimple('Недавние игры', byTags(recentGames()),
-      'Вы ещё ничего не запускали', state.tagFilter.length ? NO_TAGGED : 'Здесь появятся игры, которые вы запустили из ManyGameLib.', true));
-  } else if (state.tagFilter.length) {
+      'Вы ещё ничего не запускали', filtersOn() ? NO_TAGGED : 'Здесь появятся игры, которые вы запустили из ManyGameLib.', true));
+  } else if (filtersOn()) {
     content.classList.add('pad-top');
     const found = sorted(byTags(state.games));
-    content.append(renderSimple(`Теги: ${tagFilterNames().join(' + ')} (${found.length})`, found,
+    content.append(renderSimple(`${filterTitle()} (${found.length})`, found,
       'Нет таких игр', NO_TAGGED, false));
   } else {
     content.append(...renderLibrary());
@@ -493,7 +523,14 @@ function render() {
   refreshLaunchButtons();
 }
 
-const NO_TAGGED = 'Нет игр со всеми выбранными тегами. Снимите тег в боковом меню.';
+const NO_TAGGED = 'Нет игр, подходящих под выбранные фильтры. Снимите их в боковом меню.';
+
+function filterTitle() {
+  const parts = [];
+  if (state.statusFilter) parts.push(STATUS_LABEL[state.statusFilter]);
+  if (state.tagFilter.length) parts.push(`Теги: ${tagFilterNames().join(' + ')}`);
+  return parts.join(' · ');
+}
 
 /* Первый запуск: библиотека пуста — просим добавить первую игру. */
 function renderWelcome() {
@@ -653,7 +690,7 @@ function renderSearch() {
     h('div', { class: 'section-head' },
       h('h2', {}, `Результаты поиска (${found.length})`)));
   if (!found.length) {
-    section.append(h('div', { class: 'empty' }, h('b', {}, 'Ничего не найдено'), `По запросу «${state.query.trim()}» игр нет${state.tagFilter.length ? ' среди выбранных тегов' : ''}.`));
+    section.append(h('div', { class: 'empty' }, h('b', {}, 'Ничего не найдено'), `По запросу «${state.query.trim()}» игр нет${filtersOn() ? ' среди выбранных фильтров' : ''}.`));
   } else {
     section.append(h('div', { class: 'grid' }, found.map((g) => card(g, {}))));
   }

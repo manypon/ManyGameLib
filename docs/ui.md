@@ -15,6 +15,7 @@ All UI state lives in one object:
 | `heroId` | The game currently shown in the top block (`null` if there is no top block on screen) |
 | `view` | `library`, `favorites`, `recent` or `settings` |
 | `query` | The search text |
+| `statusFilter` | `''`, `'playing'` or `'completed'`: the status filter from the sidebar "Статус" block, see [Status filter](#status-filter) |
 | `tagFilter` | The selected tags (lower case); a game must have all of them, see [Tags](#tags) |
 | `sort` | `name`, `added`, `played` or `playtime` (most played first) |
 | `layout` | `grid` or `list` |
@@ -80,7 +81,11 @@ A game has a status "Не начата" (default), "Играю" or "Пройде
 
 ## Search
 
-The search field updates `state.query` after a **150 ms pause** in typing, not on every keystroke, because each update re-renders the screen. Switching section or adding a game clears the field and cancels any pending update, so an old query cannot come back. Search matches the game name, case-insensitively, as a substring.
+The search field updates `state.query` after a **150 ms pause** in typing, not on every keystroke, because each update re-renders the screen. Switching section or adding a game clears the field and cancels any pending update, so an old query cannot come back. Search matches the game name **and the note**, case-insensitively, as a substring.
+
+## Status filter
+
+The sidebar "Статус" block (above the tags) has two items, "Играю" and "Пройдена", with the number of games. A click selects or deselects one, "Сбросить" clears it. The filter is applied in `byTags()` together with the tags, so it combines with tags, search, Favorites and Recent. On the library page an active status or tag filter shows one list titled like "Пройдена · Теги: … (N)".
 
 ## Launch buttons
 
