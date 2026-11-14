@@ -14,7 +14,9 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 {
   "background": { "mode": "default", "blur": 4, "dim": 40, "file": null },
   "heroBackground": true,
-  "glass": false,
+  "theme": "classic",
+  "snow": true,
+  "garland": true,
   "autostart": false,
   "logging": false,
   "javaPath": "",
@@ -31,7 +33,9 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 | `background.dim` | 0–90 | `40` | Darkening layer over the picture, in percent |
 | `background.file` | file name or `null` | `null` | The user's picture, a file inside `icons\` (a bare name, never a path) |
 | `heroBackground` | `true` / `false` | `true` | Whether the top block has its own card background |
-| `glass` | `true` / `false` | `false` | The glass style (see "Glass style"); any non-boolean value becomes `false` |
+| `theme` | `classic` / `glass` / `newyear` | `classic` | The look of the window (see "Themes"). An unknown value becomes `classic`; a file from 1.7.0 with `"glass": true` and no `theme` is read as `glass`, and the old key is not written again |
+| `snow` | `true` / `false` | `true` | Falling snow; used only in the `newyear` theme |
+| `garland` | `true` / `false` | `true` | The string of lights along the top edge; used only in the `newyear` theme |
 | `autostart` | `true` / `false` | `false` | Start with Windows |
 | `logging` | `true` / `false` | `false` | Write `logs\manygamelib.log` |
 | `checkUpdates` | `true` / `false` | `true` | Check GitHub for a newer version after startup (see [Updates](updates.md)) |
@@ -49,7 +53,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 - `background.file` is accepted only if it is a bare file name (`path.basename(x) === x`), so a hand-edited file cannot point outside `icons\`;
 - `mode: custom` without a file becomes `default`.
 
-**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `glass`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
+**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `theme`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
 
 **`saveSettings(next)`** writes `settings.json.tmp`, copies the current file to `settings.json.bak`, then renames the temporary file over the real one (with the same short retry on locked files as the library).
 
@@ -116,17 +120,28 @@ With a background on, the live top block becomes a separate card: margins of 76 
 
 The `heroBackground` toggle removes the card itself. `body.hero-flat` hides `.hero-bg`, the border and the shadow, so the title, the buttons and the cover sit directly on the app background (with a soft text shadow for readability). The selectors are scoped to `.content > .hero`, so the live preview inside the add/edit form keeps showing the game's own background. The toggle only hides it on the library screen; the game's saved `hero` settings are untouched.
 
-## Glass style
+## Themes
 
-The toggle "Стеклянное оформление" (Settings → Appearance → "Стиль", off by default) sets `body.glass`. It only changes how the window looks; no layout code depends on it.
+"Стиль" in Settings → Appearance is a switch with three themes, saved as `theme`: "Обычное" (`classic`, the default), "Стекло" (`glass`) and "Новый год" (`newyear`). `applyBackground()` in `ui/app.js` turns the theme into body classes: `glass` for both `glass` and `newyear`, plus `ny` for `newyear`, and `snow` and `garland` for `newyear` when those settings are on. Nothing in the layout code depends on the theme; it is all CSS under those classes.
+
+### Glass
 
 - **Frame.** The shell gets 12 px of padding and a 12 px gap, so the sidebar floats as a rounded card (22 px) and the right part is inset from the window edges. The top bar becomes a floating glass panel (56 px) and the page scrolls under it. The top block is always a card with a glass edge (as with a background), with 72 px above it and 40 px at the sides.
 - **Glass surfaces.** Sidebar, top bar, settings, profile and achievement cards get a translucent fill, a light border, an inner highlight at the top edge and `backdrop-filter: blur(22px) saturate(1.5)`. Windows, the context menu and notices are denser (74 % fill, blur 30 px) so text stays readable on any picture; the dark layer behind a window is lighter.
-- **Cheaper parts.** Game tiles and list rows get only the border and the highlight, with no blur of their own (there can be hundreds of them). Buttons, fields and the "Играет"/"Пройдена" badges are tinted and bordered.
+- **Cheaper parts.** Game tiles and list rows get only the border and the highlight, with no blur of their own (there can be hundreds of them). Buttons, fields and the "Играю"/"Пройдена" badges are tinted and bordered.
 - **Without an own background** (`background.mode` is `none`) the layer behind the glass is soft colored blobs (four radial gradients over the usual dark color, no animation) instead of plain dark, so the glass has something to blur; the darkening layer is hidden. With the bundled or own picture the glass blurs that picture, and the blur and darkening sliders still work.
-- **Cost.** Blur is the expensive part of the style, which is why only large panels have it. The page tells the user it can be heavier on weak graphics cards.
+- **Cost.** Blur is the expensive part, which is why only large panels have it. The page tells the user it can be heavier on weak graphics cards.
 
-All rules live in one block at the end of `ui/style.css` under `.glass`, after the `.has-bg` rules, so turning the toggle off returns the ordinary look exactly.
+### New Year
+
+The glass theme plus a winter look, in a block at the end of `ui/style.css` under `.ny`:
+
+- **Palette.** The accent colors are variables (`--a-rgb`, `--a-deep-rgb`, `--a-light`, `--a-pale`, `--accent`, `--accent-hover`, `--accent-soft`); the theme replaces the violet with an icy blue, changes the glass border to a cold light one and the logo gradient to blue. The aurora blobs for `background.mode: none` become cold ones. In the other themes the values are the old violet ones, so they look exactly as before.
+- **Winter background.** With `background.mode` set to `default` the bundled `assets/wallpaper-winter.webp` (1672×941) is shown instead of `wallpaper-default.webp`. An own picture (`custom`) or `none` are respected as they are. The blur and darkening sliders work as usual.
+- **Snow** (`snow`). A full-window `<canvas id="snow">` over the interface (below notices, it ignores clicks). At most 130 flakes (about one per 16 000 px²), at most 30 frames per second, with the drift and speed of each flake random. The loop is stopped completely when the theme or the option is off, when the window is hidden (`visibilitychange`, for example in the tray) and when the system asks for reduced motion (`prefers-reduced-motion`).
+- **Garland** (`garland`). An SVG in `#garland`, built by `syncGarland()` for the current window width (one arc about every 190 px, 7 bulbs per arc in four colors with a soft glow) and rebuilt after a resize. It lies in the 12 px margin above the top bar and ignores clicks. The bulbs twinkle by four CSS animations (one per color group), which is cheap; with reduced motion they stay lit.
+
+Turning the theme off returns the ordinary look exactly: the classic theme is pixel for pixel what it was before themes existed.
 
 ## General settings
 

@@ -696,9 +696,111 @@ function settingRow(title, hint, control) {
     h('div', { class: 's-control' }, control));
 }
 
+/* ---------- Новогодняя тема: снег и гирлянда ---------- */
+
+/* Снег рисуется на холсте поверх интерфейса. Ограничения ради нагрузки: до 130 снежинок, не больше 30 кадров в секунду,
+   цикл полностью останавливается, когда тема или снег выключены, окно скрыто или в системе включено «уменьшить движение». */
+const snowFx = { raf: 0, last: 0, flakes: [], w: 0, h: 0, dpr: 1, ctx: null };
+const reducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function snowSetup() {
+  const cv = $('#snow');
+  snowFx.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  snowFx.w = window.innerWidth;
+  snowFx.h = window.innerHeight;
+  cv.width = Math.round(snowFx.w * snowFx.dpr);
+  cv.height = Math.round(snowFx.h * snowFx.dpr);
+  snowFx.ctx = cv.getContext('2d');
+  snowFx.ctx.setTransform(snowFx.dpr, 0, 0, snowFx.dpr, 0, 0);
+  const count = Math.round(Math.min(130, Math.max(40, (snowFx.w * snowFx.h) / 16000)));
+  snowFx.flakes = Array.from({ length: count }, () => ({
+    x: Math.random() * snowFx.w, y: Math.random() * snowFx.h,
+    r: 0.8 + Math.random() * 1.9, v: 18 + Math.random() * 38, a: 0.35 + Math.random() * 0.55,
+    ph: Math.random() * Math.PI * 2, sw: 0.4 + Math.random() * 0.9, dr: 6 + Math.random() * 14,
+  }));
+}
+
+function snowFrame(t) {
+  snowFx.raf = requestAnimationFrame(snowFrame);
+  if (t - snowFx.last < 33) return;
+  const dt = snowFx.last ? Math.min((t - snowFx.last) / 1000, 0.1) : 0.033;
+  snowFx.last = t;
+  const { ctx, w, h } = snowFx;
+  ctx.clearRect(0, 0, w, h);
+  for (const f of snowFx.flakes) {
+    f.y += f.v * dt;
+    f.ph += f.sw * dt;
+    f.x += Math.sin(f.ph) * f.dr * dt;
+    if (f.y > h + 4) { f.y = -4; f.x = Math.random() * w; }
+    if (f.x > w + 4) f.x = -4; else if (f.x < -4) f.x = w + 4;
+    ctx.fillStyle = `rgba(255,255,255,${f.a})`;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function syncSnow() {
+  const want = document.body.classList.contains('snow') && !document.hidden && !reducedMotion();
+  if (want && !snowFx.raf) {
+    snowSetup();
+    snowFx.last = 0;
+    snowFx.raf = requestAnimationFrame(snowFrame);
+  } else if (!want && snowFx.raf) {
+    cancelAnimationFrame(snowFx.raf);
+    snowFx.raf = 0;
+    if (snowFx.ctx) snowFx.ctx.clearRect(0, 0, snowFx.w, snowFx.h);
+  }
+}
+
+/* Гирлянда: SVG по ширине окна, лампочки сидят на провисающей нити. Пересобирается при изменении ширины. */
+const GARLAND_COLORS = ['#ff5d7a', '#ffd166', '#6fc4ff', '#7ef0b0'];
+let garlandWidth = 0;
+
+function syncGarland() {
+  if (!document.body.classList.contains('garland')) { garlandWidth = 0; $('#garland').replaceChildren(); return; }
+  const w = Math.round(window.innerWidth);
+  if (w === garlandWidth) return;
+  garlandWidth = w;
+  const n = Math.max(2, Math.round(w / 190));
+  const step = w / n;
+  let wire = '';
+  const groups = ['', '', '', ''];
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    const x0 = i * step;
+    const x1 = x0 + step;
+    const mid = (x0 + x1) / 2;
+    wire += `M${x0.toFixed(1)} 1Q${mid.toFixed(1)} 13 ${x1.toFixed(1)} 1`;
+    for (let j = 1; j < 8; j++) {
+      const t = j / 8;
+      const x = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * mid + t * t * x1;
+      const y = (1 - t) * (1 - t) + 2 * (1 - t) * t * 13 + t * t + 3;
+      const c = GARLAND_COLORS[k % 4];
+      groups[k % 4] += `<circle class="halo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="9" fill="url(#gl${k % 4})"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.6" fill="${c}"/><circle cx="${(x - 0.8).toFixed(1)}" cy="${(y - 0.9).toFixed(1)}" r="0.9" fill="#fff" fill-opacity="0.8"/>`;
+      k++;
+    }
+  }
+  $('#garland').innerHTML = `<svg viewBox="0 0 ${w} 18" aria-hidden="true"><defs>${GARLAND_COLORS.map((c, i) => `<radialGradient id="gl${i}"><stop offset="0" stop-color="${c}" stop-opacity="0.85"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>`).join('')}</defs><path class="wire" d="${wire}"/>${groups.map((g, i) => `<g class="g${i}">${g}</g>`).join('')}</svg>`;
+}
+
+document.addEventListener('visibilitychange', syncSnow);
+let fxResizeTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(fxResizeTimer);
+  fxResizeTimer = setTimeout(() => {
+    if (snowFx.raf) snowSetup();
+    syncGarland();
+  }, 150);
+});
+
 /* ---------- Фон приложения ---------- */
 
 const DEFAULT_WALLPAPER = 'assets/wallpaper-default.webp';
+const WINTER_WALLPAPER = 'assets/wallpaper-winter.webp';   // встроенный фон темы «Новый год»
+
+/* Оформление: classic | glass | newyear. Новый год это стекло плюс зимняя тема. */
+const themeOf = () => (['glass', 'newyear'].includes(state.settings.theme) ? state.settings.theme : 'classic');
 
 /* Показывает фон по текущим настройкам. Вызывается и во время движения ползунков,
    поэтому здесь только смена стилей, без перерисовки страницы. */
@@ -707,12 +809,18 @@ function applyBackground() {
   const bg = state.settings && state.settings.background;
   if (!bg) return;
   document.body.classList.toggle('hero-flat', state.settings.heroBackground === false);
-  document.body.classList.toggle('glass', state.settings.glass === true);
+  const theme = themeOf();
+  document.body.classList.toggle('glass', theme !== 'classic');
+  document.body.classList.toggle('ny', theme === 'newyear');
+  document.body.classList.toggle('snow', theme === 'newyear' && state.settings.snow !== false);
+  document.body.classList.toggle('garland', theme === 'newyear' && state.settings.garland !== false);
+  syncSnow();
+  syncGarland();
   const on = bg.mode !== 'none';
   document.body.classList.toggle('has-bg', on);
   root.classList.toggle('ready', on);
   if (!on) return;
-  const url = bg.mode === 'custom' && state.wallpaper ? state.wallpaper : DEFAULT_WALLPAPER;
+  const url = bg.mode === 'custom' && state.wallpaper ? state.wallpaper : (theme === 'newyear' ? WINTER_WALLPAPER : DEFAULT_WALLPAPER);
   const img = root.querySelector('.app-bg-img');
   img.style.backgroundImage = `url("${url}")`;
   img.style.filter = bg.blur ? `blur(${bg.blur}px)` : 'none';
@@ -828,14 +936,28 @@ function appearancePanel() {
         applyBackground();
         saveSettingsPatch({ heroBackground: on });
       })));
-  const glassCard = settingsCard('Стиль', 'Общий вид окна',
-    settingRow('Стеклянное оформление', 'Боковая панель плавает с отступами, а панели, карточки, окна и уведомления полупрозрачные с размытием. Без своего фона за стеклом мягкие цветные пятна. На слабых видеокартах может быть тяжелее',
-      toggle(state.settings.glass === true, (on) => {
-        state.settings.glass = on;
+  const theme = themeOf();
+  const themeCard = settingsCard('Стиль', 'Общий вид окна',
+    settingRow('Оформление', 'Стекло: боковая панель плавает с отступами, панели, карточки и окна полупрозрачные с размытием. Новый год: стекло, холодная палитра, зимний фон, снег и гирлянда. На слабых видеокартах может быть тяжелее',
+      segmented([['classic', 'Обычное'], ['glass', 'Стекло'], ['newyear', 'Новый год']], themeOf, (v) => {
+        state.settings.theme = v;
         applyBackground();
-        saveSettingsPatch({ glass: on });
+        saveSettingsPatch({ theme: v });
+        render();
+      }).node),
+    theme === 'newyear' && settingRow('Падающий снег', 'Лёгкая анимация поверх интерфейса. Останавливается, когда окно скрыто',
+      toggle(state.settings.snow !== false, (on) => {
+        state.settings.snow = on;
+        applyBackground();
+        saveSettingsPatch({ snow: on });
+      })),
+    theme === 'newyear' && settingRow('Гирлянда', 'Огоньки по верхнему краю окна',
+      toggle(state.settings.garland !== false, (on) => {
+        state.settings.garland = on;
+        applyBackground();
+        saveSettingsPatch({ garland: on });
       })));
-  return [glassCard, settingsCard('Фон приложения', 'Картинка за всем интерфейсом', rows), heroCard];
+  return [themeCard, settingsCard('Фон приложения', 'Картинка за всем интерфейсом', rows), heroCard];
 }
 
 async function pickJava() {

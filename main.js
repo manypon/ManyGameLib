@@ -254,9 +254,12 @@ function purgeTrash() {
    custom: картинка пользователя (копия в icons), none: сплошной цвет.
    Фон «от игры» живёт только в верхнем блоке (настройки hero), а не здесь. */
 const BG_MODES = ['none', 'default', 'custom'];
+const THEMES = ['classic', 'glass', 'newyear'];
 const SETTINGS_DEFAULTS = {
   background: { mode: 'default', blur: 4, dim: 40, file: null }, // blur в px, dim в %
-  glass: false,          // стеклянное оформление: плавающая панель, полупрозрачные карточки и окна
+  theme: 'classic',      // оформление: classic | glass (стекло) | newyear (стекло + зимняя тема)
+  snow: true,            // падающий снег (только в теме newyear)
+  garland: true,         // гирлянда по верхнему краю (только в теме newyear)
   heroBackground: true,  // фон-карточка верхнего блока; выкл: текст лежит прямо на фоне приложения
   autostart: false,
   logging: false,
@@ -290,7 +293,10 @@ function normalizeSettings(raw) {
       file,
     },
     heroBackground: typeof r.heroBackground === 'boolean' ? r.heroBackground : d.heroBackground,
-    glass: typeof r.glass === 'boolean' ? r.glass : d.glass,
+    // в 1.7.0 было булево glass: оно становится темой glass
+    theme: THEMES.includes(r.theme) ? r.theme : (r.glass === true ? 'glass' : d.theme),
+    snow: typeof r.snow === 'boolean' ? r.snow : d.snow,
+    garland: typeof r.garland === 'boolean' ? r.garland : d.garland,
     autostart: typeof r.autostart === 'boolean' ? r.autostart : d.autostart,
     logging: typeof r.logging === 'boolean' ? r.logging : d.logging,
     checkUpdates: typeof r.checkUpdates === 'boolean' ? r.checkUpdates : d.checkUpdates,
@@ -344,7 +350,7 @@ function mergeSettings(patch) {
   const bg = p.background && typeof p.background === 'object' ? p.background : {};
   return normalizeSettings({
     ...settings,
-    ...Object.fromEntries(['heroBackground', 'glass', 'autostart', 'logging', 'javaPath', 'checkUpdates', 'closeAction', 'startMinimized'].filter((k) => k in p).map((k) => [k, p[k]])),
+    ...Object.fromEntries(['heroBackground', 'theme', 'snow', 'garland', 'autostart', 'logging', 'javaPath', 'checkUpdates', 'closeAction', 'startMinimized'].filter((k) => k in p).map((k) => [k, p[k]])),
     background: {
       ...settings.background,
       ...Object.fromEntries(['mode', 'blur', 'dim'].filter((k) => k in bg).map((k) => [k, bg[k]])),
