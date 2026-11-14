@@ -35,6 +35,8 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 | `heroBackground` | `true` / `false` | `true` | Whether the top block has its own card background |
 | `theme` | `classic` / `glass` / `newyear` | `classic` | The look of the window (see "Themes"). An unknown value becomes `classic`; a file from 1.7.0 with `"glass": true` and no `theme` is read as `glass`, and the old key is not written again |
 | `snow` | `true` / `false` | `true` | Falling snow; used only in the `newyear` theme |
+| `accent` | `violet`, `blue`, `cyan`, `green`, `orange`, `pink`, `red` | `violet` | The accent color of the `classic` and `glass` themes; `newyear` has its own cold palette. An unknown value becomes the default |
+| `glassAlpha` | 15 to 90 | `42` | Glass density in %: the higher, the less transparent the panels and cards (themes `glass` and `newyear`) |
 | `garland` | `true` / `false` | `true` | The string of lights along the top edge; used only in the `newyear` theme |
 | `autostart` | `true` / `false` | `false` | Start with Windows |
 | `logging` | `true` / `false` | `false` | Write `logs\manygamelib.log` |
@@ -53,7 +55,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 - `background.file` is accepted only if it is a bare file name (`path.basename(x) === x`), so a hand-edited file cannot point outside `icons\`;
 - `mode: custom` without a file becomes `default`.
 
-**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `theme`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
+**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `theme`, `accent`, `glassAlpha`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
 
 **`saveSettings(next)`** writes `settings.json.tmp`, copies the current file to `settings.json.bak`, then renames the temporary file over the real one (with the same short retry on locked files as the library).
 
@@ -123,6 +125,8 @@ The `heroBackground` toggle removes the card itself. `body.hero-flat` hides `.he
 ## Themes
 
 "Стиль" in Settings → Appearance is a switch with three themes, saved as `theme`: "Обычное" (`classic`, the default), "Стекло" (`glass`) and "Новый год" (`newyear`). `applyBackground()` in `ui/app.js` turns the theme into body classes: `glass` for both `glass` and `newyear`, plus `ny` for `newyear`, and `snow` and `garland` for `newyear` when those settings are on. Nothing in the layout code depends on the theme; it is all CSS under those classes.
+
+**Accent color and glass density.** The accent is the body class `acc-<name>` (none for `violet`, which is the default in `:root`); each class redefines the palette variables (`--a-rgb`, `--a-deep-rgb`, `--a-light`, `--a-pale`, `--accent`, `--accent-hover`, `--a-end`, `--a-text`…). In `newyear` the class is not set and the cold palette stays. The glass density sets `--g-bg` and `--g-bg-strong` on `body` (alpha = `glassAlpha`, and +0.32 up to 0.96 for the strong one) while the slider moves; it is saved when released.
 
 ### Glass
 

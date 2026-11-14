@@ -35,6 +35,8 @@
 | `heroBackground` | `true` / `false` | `true` | Есть ли у верхнего блока своя карточка с фоном |
 | `theme` | `classic` / `glass` / `newyear` | `classic` | Вид окна (см. «Темы»). Неизвестное значение становится `classic`; файл из 1.7.0 с `"glass": true` без `theme` читается как `glass`, а старый ключ больше не записывается |
 | `snow` | `true` / `false` | `true` | Падающий снег; действует только в теме `newyear` |
+| `accent` | `violet`, `blue`, `cyan`, `green`, `orange`, `pink`, `red` | `violet` | Акцентный цвет тем `classic` и `glass`; у `newyear` своя холодная палитра. Неизвестное значение становится значением по умолчанию |
+| `glassAlpha` | от 15 до 90 | `42` | Плотность стекла в %: чем больше, тем менее прозрачны панели и карточки (темы `glass` и `newyear`) |
 | `garland` | `true` / `false` | `true` | Гирлянда по верхнему краю; действует только в теме `newyear` |
 | `autostart` | `true` / `false` | `false` | Запускать вместе с Windows |
 | `logging` | `true` / `false` | `false` | Писать `logs\manygamelib.log` |
@@ -53,7 +55,7 @@
 - `background.file` принимается, только если это простое имя файла (`path.basename(x) === x`), поэтому вручную исправленный файл не может указать за пределы `icons\`;
 - `mode: custom` без файла становится `default`.
 
-**`mergeSettings(patch)`** накладывает частичное изменение на текущие настройки. Копируются только известные ключи (`heroBackground`, `theme`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized` и `background.mode/blur/dim`). Страница не может задать `background.file` напрямую: это поле меняют только `set_wallpaper` и `clear_wallpaper`.
+**`mergeSettings(patch)`** накладывает частичное изменение на текущие настройки. Копируются только известные ключи (`heroBackground`, `theme`, `accent`, `glassAlpha`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized` и `background.mode/blur/dim`). Страница не может задать `background.file` напрямую: это поле меняют только `set_wallpaper` и `clear_wallpaper`.
 
 **`saveSettings(next)`** пишет `settings.json.tmp`, копирует текущий файл в `settings.json.bak`, затем переименовывает временный файл поверх настоящего (с тем же коротким повтором при занятом файле, что и у библиотеки).
 
@@ -123,6 +125,8 @@
 ## Темы
 
 «Стиль» в «Настройки → Внешний вид» это переключатель из трёх тем, сохраняется как `theme`: «Обычное» (`classic`, по умолчанию), «Стекло» (`glass`) и «Новый год» (`newyear`). `applyBackground()` в `ui/app.js` превращает тему в классы на `body`: `glass` для `glass` и `newyear`, плюс `ny` для `newyear`, а также `snow` и `garland` для `newyear`, если эти настройки включены. Код раскладки от темы не зависит: всё делается CSS под этими классами.
+
+**Акцентный цвет и плотность стекла.** Акцент это класс `acc-<имя>` на `body` (для `violet` класса нет, это значения по умолчанию из `:root`); каждый класс переопределяет переменные палитры (`--a-rgb`, `--a-deep-rgb`, `--a-light`, `--a-pale`, `--accent`, `--accent-hover`, `--a-end`, `--a-text`…). В `newyear` класс не ставится, остаётся холодная палитра. Плотность стекла задаёт `--g-bg` и `--g-bg-strong` на `body` (альфа = `glassAlpha`, у «сильного» +0,32, не больше 0,96) во время движения ползунка; сохраняется при отпускании.
 
 ### Стекло
 

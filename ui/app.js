@@ -837,6 +837,9 @@ const DEFAULT_WALLPAPER = 'assets/wallpaper-default.webp';
 const WINTER_WALLPAPER = 'assets/wallpaper-winter.webp';   // встроенный фон темы «Новый год»
 
 /* Оформление: classic | glass | newyear. Новый год это стекло плюс зимняя тема. */
+const ACCENT_NAMES = ['violet', 'blue', 'cyan', 'green', 'orange', 'pink', 'red'];
+const ACCENT_COLORS = { violet: '#5b3df5', blue: '#2563eb', cyan: '#0891b2', green: '#16a34a', orange: '#ea6c0c', pink: '#db2777', red: '#dc2626' };
+const ACCENT_LABELS = { violet: 'Фиолетовый', blue: 'Синий', cyan: 'Бирюзовый', green: 'Зелёный', orange: 'Оранжевый', pink: 'Розовый', red: 'Красный' };
 const themeOf = () => (['glass', 'newyear'].includes(state.settings.theme) ? state.settings.theme : 'classic');
 
 /* Показывает фон по текущим настройкам. Вызывается и во время движения ползунков,
@@ -851,6 +854,11 @@ function applyBackground() {
   document.body.classList.toggle('ny', theme === 'newyear');
   document.body.classList.toggle('snow', theme === 'newyear' && state.settings.snow !== false);
   document.body.classList.toggle('garland', theme === 'newyear' && state.settings.garland !== false);
+  const accent = theme === 'newyear' ? 'violet' : (ACCENT_NAMES.includes(state.settings.accent) ? state.settings.accent : 'violet');
+  for (const k of ACCENT_NAMES) document.body.classList.toggle(`acc-${k}`, k === accent && k !== 'violet');
+  const ga = Math.min(90, Math.max(15, Number(state.settings.glassAlpha) || 42)) / 100;
+  document.body.style.setProperty('--g-bg', `rgba(26, 26, 40, ${ga})`);
+  document.body.style.setProperty('--g-bg-strong', `rgba(28, 28, 42, ${Math.min(0.96, ga + 0.32).toFixed(2)})`);
   syncSnow();
   syncGarland();
   const on = bg.mode !== 'none';
@@ -982,6 +990,16 @@ function appearancePanel() {
         saveSettingsPatch({ theme: v });
         render();
       }).node),
+    theme !== 'classic' && settingRow('Плотность стекла', 'Чем меньше, тем прозрачнее панели и карточки; чем больше, тем лучше читается текст на ярком фоне',
+      slider({ min: 15, max: 90, value: state.settings.glassAlpha ?? 42, unit: '%',
+        onLive: (n) => { state.settings.glassAlpha = n; applyBackground(); },
+        onSave: (n) => saveSettingsPatch({ glassAlpha: n }) })),
+    theme !== 'newyear' && settingRow('Акцентный цвет', 'Кнопки, выделение, полосы статистики и значки',
+      h('div', { class: 'acc-row' }, ACCENT_NAMES.map((k) => h('button', {
+        class: `acc-dot${(state.settings.accent || 'violet') === k ? ' on' : ''}`, type: 'button',
+        title: ACCENT_LABELS[k], 'aria-label': ACCENT_LABELS[k], style: `background:${ACCENT_COLORS[k]}`,
+        onClick: () => { state.settings.accent = k; applyBackground(); saveSettingsPatch({ accent: k }); render(); },
+      })))),
     theme === 'newyear' && settingRow('Падающий снег', 'Лёгкая анимация поверх интерфейса. Останавливается, когда окно скрыто',
       toggle(state.settings.snow !== false, (on) => {
         state.settings.snow = on;
