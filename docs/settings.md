@@ -14,6 +14,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 {
   "background": { "mode": "default", "blur": 4, "dim": 40, "file": null },
   "heroBackground": true,
+  "glass": false,
   "autostart": false,
   "logging": false,
   "javaPath": "",
@@ -30,6 +31,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 | `background.dim` | 0–90 | `40` | Darkening layer over the picture, in percent |
 | `background.file` | file name or `null` | `null` | The user's picture, a file inside `icons\` (a bare name, never a path) |
 | `heroBackground` | `true` / `false` | `true` | Whether the top block has its own card background |
+| `glass` | `true` / `false` | `false` | The glass style (see "Glass style"); any non-boolean value becomes `false` |
 | `autostart` | `true` / `false` | `false` | Start with Windows |
 | `logging` | `true` / `false` | `false` | Write `logs\manygamelib.log` |
 | `checkUpdates` | `true` / `false` | `true` | Check GitHub for a newer version after startup (see [Updates](updates.md)) |
@@ -47,7 +49,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 - `background.file` is accepted only if it is a bare file name (`path.basename(x) === x`), so a hand-edited file cannot point outside `icons\`;
 - `mode: custom` without a file becomes `default`.
 
-**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
+**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `glass`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
 
 **`saveSettings(next)`** writes `settings.json.tmp`, copies the current file to `settings.json.bak`, then renames the temporary file over the real one (with the same short retry on locked files as the library).
 
@@ -113,6 +115,18 @@ A slider fires two events. `input` (while dragging) only calls `applyBackground(
 With a background on, the live top block becomes a separate card: margins of 76 px at the top and 40 px at the sides, rounded corners, a border and a shadow, with a darkening gradient inside it instead of fading into the page. Without a background it stays full-width as before. A picture and the blurred game art are never blended, which is why the card has a sharp edge.
 
 The `heroBackground` toggle removes the card itself. `body.hero-flat` hides `.hero-bg`, the border and the shadow, so the title, the buttons and the cover sit directly on the app background (with a soft text shadow for readability). The selectors are scoped to `.content > .hero`, so the live preview inside the add/edit form keeps showing the game's own background. The toggle only hides it on the library screen; the game's saved `hero` settings are untouched.
+
+## Glass style
+
+The toggle "Стеклянное оформление" (Settings → Appearance → "Стиль", off by default) sets `body.glass`. It only changes how the window looks; no layout code depends on it.
+
+- **Frame.** The shell gets 12 px of padding and a 12 px gap, so the sidebar floats as a rounded card (22 px) and the right part is inset from the window edges. The top bar becomes a floating glass panel (56 px) and the page scrolls under it. The top block is always a card with a glass edge (as with a background), with 72 px above it and 40 px at the sides.
+- **Glass surfaces.** Sidebar, top bar, settings, profile and achievement cards get a translucent fill, a light border, an inner highlight at the top edge and `backdrop-filter: blur(22px) saturate(1.5)`. Windows, the context menu and notices are denser (74 % fill, blur 30 px) so text stays readable on any picture; the dark layer behind a window is lighter.
+- **Cheaper parts.** Game tiles and list rows get only the border and the highlight, with no blur of their own (there can be hundreds of them). Buttons, fields and the "Играет"/"Пройдена" badges are tinted and bordered.
+- **Without an own background** (`background.mode` is `none`) the layer behind the glass is soft colored blobs (four radial gradients over the usual dark color, no animation) instead of plain dark, so the glass has something to blur; the darkening layer is hidden. With the bundled or own picture the glass blurs that picture, and the blur and darkening sliders still work.
+- **Cost.** Blur is the expensive part of the style, which is why only large panels have it. The page tells the user it can be heavier on weak graphics cards.
+
+All rules live in one block at the end of `ui/style.css` under `.glass`, after the `.has-bg` rules, so turning the toggle off returns the ordinary look exactly.
 
 ## General settings
 

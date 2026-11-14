@@ -707,6 +707,7 @@ function applyBackground() {
   const bg = state.settings && state.settings.background;
   if (!bg) return;
   document.body.classList.toggle('hero-flat', state.settings.heroBackground === false);
+  document.body.classList.toggle('glass', state.settings.glass === true);
   const on = bg.mode !== 'none';
   document.body.classList.toggle('has-bg', on);
   root.classList.toggle('ready', on);
@@ -827,7 +828,14 @@ function appearancePanel() {
         applyBackground();
         saveSettingsPatch({ heroBackground: on });
       })));
-  return [settingsCard('Фон приложения', 'Картинка за всем интерфейсом', rows), heroCard];
+  const glassCard = settingsCard('Стиль', 'Общий вид окна',
+    settingRow('Стеклянное оформление', 'Боковая панель плавает с отступами, а панели, карточки, окна и уведомления полупрозрачные с размытием. Без своего фона за стеклом мягкие цветные пятна. На слабых видеокартах может быть тяжелее',
+      toggle(state.settings.glass === true, (on) => {
+        state.settings.glass = on;
+        applyBackground();
+        saveSettingsPatch({ glass: on });
+      })));
+  return [glassCard, settingsCard('Фон приложения', 'Картинка за всем интерфейсом', rows), heroCard];
 }
 
 async function pickJava() {

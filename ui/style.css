@@ -652,3 +652,94 @@ textarea { font: inherit; color: inherit; }
 .st-badge.playing { color: #8fb4ff; }
 .st-badge.playing svg { fill: currentColor; stroke: none; }
 .miss-badge ~ .st-badge { top: 34px; }
+
+/* ---------- Стеклянное оформление (Настройки → Внешний вид → Стиль) ----------
+   Включается классом body.glass. Размытие дорогое, поэтому backdrop-filter стоит только на крупных панелях:
+   боковая панель, верхняя строка, карточки настроек и профиля, окна, меню и уведомления.
+   Плитки игр стеклянные только по виду (рамка и блик), без собственного размытия. */
+.glass {
+  --g-bg: rgba(26, 26, 40, 0.42);
+  --g-bg-strong: rgba(28, 28, 42, 0.74);
+  --g-border: rgba(255, 255, 255, 0.16);
+  --g-blur: blur(22px) saturate(1.5);
+  --g-shadow: 0 16px 44px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+
+/* Подложка, когда своего фона нет: мягкие цветные пятна, чтобы стеклу было что размывать. */
+.glass .app-bg:not(.ready) {
+  background:
+    radial-gradient(58% 55% at 10% 16%, rgba(91, 61, 245, 0.55), transparent 70%),
+    radial-gradient(48% 50% at 90% 10%, rgba(0, 176, 214, 0.36), transparent 70%),
+    radial-gradient(55% 60% at 82% 92%, rgba(236, 72, 153, 0.32), transparent 70%),
+    radial-gradient(42% 48% at 18% 94%, rgba(34, 197, 94, 0.2), transparent 70%),
+    var(--bg);
+}
+.glass .app-bg:not(.ready) .app-bg-dim { display: none; }
+
+/* Каркас: боковая панель плавает с отступами, правая часть занимает остальное. */
+.glass .shell { padding: 12px; gap: 12px; grid-template-rows: minmax(0, 1fr); }
+.glass .main { height: 100%; }
+.glass .sidebar {
+  background: var(--g-bg); border: 1px solid var(--g-border); border-radius: 22px;
+  -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); box-shadow: var(--g-shadow);
+  min-height: 0; overflow: hidden;
+}
+.glass .nav-item.active { background: linear-gradient(90deg, rgba(122, 92, 255, 0.4), rgba(122, 92, 255, 0.14)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.glass .side-foot { border-top-color: var(--g-border); }
+.glass .side-foot-icon { background: rgba(255, 255, 255, 0.08); }
+
+/* Верхняя строка: тоже плавающая стеклянная панель, содержимое прокручивается под ней. */
+.glass .topbar {
+  height: 56px; padding: 0 8px 0 14px; border-radius: 18px;
+  background: var(--g-bg); border: 1px solid var(--g-border);
+  -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); box-shadow: var(--g-shadow);
+}
+.glass .search { background: rgba(255, 255, 255, 0.06); border-color: var(--g-border); backdrop-filter: none; height: 38px; }
+.glass .content.pad-top { padding-top: 80px; }
+
+/* Верхний блок всегда карточка со стеклянным краем, как при включённом фоне. */
+.glass .content > .hero {
+  margin: 72px 40px 0; height: 380px; padding: 0 36px 40px;
+  border-radius: 22px; border: 1px solid var(--g-border); box-shadow: var(--g-shadow);
+}
+.glass .content > .hero .hero-bg::after {
+  background:
+    linear-gradient(to top, rgba(13, 13, 18, 0.7), rgba(13, 13, 18, 0) 70%),
+    linear-gradient(to right, rgba(13, 13, 18, 0.7), rgba(13, 13, 18, 0) 65%);
+}
+.glass.hero-flat .content > .hero { border-color: transparent; box-shadow: none; padding-left: 0; padding-right: 0; }
+
+/* Карточки: настройки, профиль, достижения. */
+.glass .s-card, .glass .pf-tile, .glass .ach {
+  background: var(--g-bg); border-color: var(--g-border);
+  -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); box-shadow: var(--g-shadow);
+}
+.glass .s-row { border-top-color: rgba(255, 255, 255, 0.1); }
+.glass .ach.done { border-color: rgba(255, 200, 87, 0.45); }
+.glass .pf-bar, .glass .pf-col { background: rgba(255, 255, 255, 0.1); }
+
+/* Плитки игр и строки списка: рамка и блик без размытия, их много. */
+.glass .cover { border-color: var(--g-border); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.16); }
+.glass .card.selected .cover { border-color: rgba(160, 140, 255, 0.9); }
+.glass .row:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--g-border); }
+.glass .row.selected { background: rgba(122, 92, 255, 0.28); }
+.glass :is(.chip, .fav-badge, .st-badge, .miss-badge) { border: 1px solid var(--g-border); }
+
+/* Кнопки и поля. */
+.glass .btn.ghost { background: rgba(255, 255, 255, 0.1); border-color: var(--g-border); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.glass .btn.ghost:hover { background: rgba(255, 255, 255, 0.18); }
+.glass .btn.primary { box-shadow: 0 8px 24px rgba(91, 61, 245, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.28); }
+.glass .input, .glass .select select, .glass .opts { background: rgba(255, 255, 255, 0.07); border-color: var(--g-border); }
+.glass .select select option { background: #1c1c28; }
+.glass .opts button.on { background: rgba(122, 92, 255, 0.35); color: #fff; }
+.glass .winctl button:hover { background: rgba(255, 255, 255, 0.14); }
+
+/* Окна, меню, уведомления: плотнее, чтобы текст читался на любом фоне. */
+.glass .backdrop { background: rgba(6, 6, 12, 0.42); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.glass .modal, .glass .ctx, .glass .toast {
+  background: var(--g-bg-strong); border-color: var(--g-border);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5); backdrop-filter: blur(30px) saturate(1.5);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+.glass .modal { border-radius: 22px; }
+.glass .icon-pick { background: rgba(255, 255, 255, 0.06); }
