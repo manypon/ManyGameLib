@@ -853,3 +853,7 @@ textarea { font: inherit; color: inherit; }
 
 /* Выбор интервала автокопий */
 .s-select { width: auto; min-width: 170px; padding: 8px 12px; cursor: pointer; }
+
+/* Игра «в планах» */
+.miss-badge.plan-badge { background: rgba(var(--a-deep-rgb), 0.92); }
+.planned-hint { margin: -6px 0 2px; }

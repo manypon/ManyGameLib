@@ -478,6 +478,7 @@ function view(g) {
     id: g.id,
     name: g.name,
     exe_path: g.exe_path,
+    planned: !g.exe_path,   // игра «в планах»: файла запуска ещё нет
     args: cleanArgs(g.args),
     workdir: cleanWorkdir(g.workdir),
     admin: g.admin === true,
@@ -493,7 +494,7 @@ function view(g) {
     last_played: g.last_played ?? null,
     playtime_sec: playtimeOf(g),
     added_at: g.added_at,
-    missing: !isFile(g.exe_path),
+    missing: !!g.exe_path && !isFile(g.exe_path),
     running: sessions.has(g.id),
   };
 }
@@ -1099,6 +1100,7 @@ function buildExport() {
     const rec = {
       name: g.name,
       exe_path: g.exe_path,
+      planned: !g.exe_path,
       args: cleanArgs(g.args),
       workdir: cleanWorkdir(g.workdir),
       admin: g.admin === true,
@@ -1156,7 +1158,7 @@ function mergeImport(buf) {
   const list = meta('games.json');
   if (!Array.isArray(list)) throw new Error('Список игр в архиве записан неверно.');
 
-  const seen = new Set(games.map((g) => pathKey(g.exe_path)));
+  const seen = new Set(games.map((g) => (g.exe_path ? pathKey(g.exe_path) : `planned:${String(g.name).toLowerCase()}`)));
   const usedIds = new Set(games.map((g) => g.id));
   let nextId = Date.now();
   const created = [];
@@ -1169,8 +1171,9 @@ function mergeImport(buf) {
       let name;
       try { name = cleanName(rec.name); } catch { skipped++; continue; }
       const exe = typeof rec.exe_path === 'string' ? rec.exe_path.trim() : '';
-      if (!exe || exe.length > 1000 || /[\u0000-\u001f]/.test(exe)) { skipped++; continue; }
-      const key = pathKey(exe);
+      const planned = rec.planned === true && !exe;   // «в планах»: пути нет, а повтор определяем по названию
+      if (!planned && (!exe || exe.length > 1000 || /[\u0000-\u001f]/.test(exe))) { skipped++; continue; }
+      const key = planned ? `planned:${name.toLowerCase()}` : pathKey(exe);
       if (seen.has(key)) { skipped++; continue; }
       seen.add(key);
 
@@ -1232,6 +1235,7 @@ async function launchGame(id, profileId) {
   if (sessions.has(id)) return view(g); // уже запущена: второй экземпляр не открываем
   const last = launchedAt.get(id);
   if (last && Date.now() - last < LAUNCH_LOCK_MS) return view(g); // игра только что запущена
+  if (!g.exe_path) throw new Error('Игра в планах: сначала укажите файл запуска (кнопка «Изменить»).');
   if (!isFile(g.exe_path)) throw new Error(`Файл игры не найден: ${g.exe_path}`);
   if (launching.has(id)) return view(g);   // идёт запуск (например, открыто окно UAC)
   launchedAt.set(id, Date.now()); // ставим сразу, чтобы второй запрос не прошёл, пока идёт первый
@@ -1492,7 +1496,7 @@ function registerHandlers() {
   handle('get_games', () => games.map(view));
 
   /* Только id игр, файлы которых не найдены (дешёвая проверка при возврате в окно). */
-  handle('get_missing', () => games.filter((g) => !isFile(g.exe_path)).map((g) => g.id));
+  handle('get_missing', () => games.filter((g) => g.exe_path && !isFile(g.exe_path)).map((g) => g.id));
 
   /* Тяжёлые картинки одной игры. */
   handle('get_assets', ({ id }) => {
@@ -1515,10 +1519,11 @@ function registerHandlers() {
     return data ? `data:image/png;base64,${data.toString('base64')}` : null;
   });
 
-  handle('add_game', async ({ name, exePath, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }) => {
+  handle('add_game', async ({ name, exePath, planned, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     name = cleanName(name);
-    checkExe(exePath, null);
+    if (planned === true) { exePath = ''; args = ''; workdir = ''; admin = false; profiles = []; }   // в планах: файла, параметров и профилей нет
+    else checkExe(exePath, null);
     const dir = checkWorkdir(workdir);
     const profs = cleanProfiles(profiles, true);
     images = await prepareImages(images, exePath);
@@ -1543,11 +1548,12 @@ function registerHandlers() {
     return view(game);
   });
 
-  handle('update_game', async ({ id, name, exePath, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }) => {
+  handle('update_game', async ({ id, name, exePath, planned, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     const old = findGame(id);
     name = cleanName(name);
-    checkExe(exePath, id);
+    if (planned === true) { exePath = ''; args = ''; workdir = ''; admin = false; profiles = []; }
+    else checkExe(exePath, id);
     const dir = workdir === undefined ? undefined : checkWorkdir(workdir);
     const profs = profiles === undefined ? undefined : cleanProfiles(profiles, true);
     images = await prepareImages(images, exePath);
@@ -1600,6 +1606,7 @@ function registerHandlers() {
   /* Путь берём из библиотеки по id: страница не может подсунуть чужой путь ни проводнику, ни буферу обмена. */
   handle('show_in_folder', ({ id }) => {
     const g = findGame(id);
+    if (!g.exe_path) throw new Error('У игры в планах ещё нет файла.');
     if (isFile(g.exe_path)) { shell.showItemInFolder(g.exe_path); return; }
     const dir = path.dirname(g.exe_path);
     let isDir = false;
@@ -1609,7 +1616,9 @@ function registerHandlers() {
   });
 
   handle('copy_path', ({ id }) => {
-    clipboard.writeText(findGame(id).exe_path);
+    const g = findGame(id);
+    if (!g.exe_path) throw new Error('У игры в планах ещё нет файла.');
+    clipboard.writeText(g.exe_path);
   });
 
   handle('get_stats', () => history.stats(games));

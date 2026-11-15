@@ -248,6 +248,7 @@ function unlockLaunch(id) {
 
 async function launch(id, profile) {
   const game = state.games.find((g) => g.id === id);
+  if (game && game.planned) { toast('Игра в планах: укажите файл запуска'); openEditModal(id); return; }
   if (!game || game.running || launching.has(id)) return; // уже идёт или запускается: повторное нажатие игнорируем
   lockLaunch(id);
   try {
@@ -342,7 +343,8 @@ const filtersOn = () => !!state.statusFilter || state.tagFilter.length > 0;
 
 const byTags = (list) => {
   let out = list;
-  if (state.statusFilter) out = out.filter((g) => (g.status || '') === state.statusFilter);
+  if (state.statusFilter === 'planned') out = out.filter((g) => g.planned);
+  else if (state.statusFilter) out = out.filter((g) => !g.planned && (g.status || '') === state.statusFilter);
   if (state.tagFilter.length) out = out.filter((g) => state.tagFilter.every((k) => (g.tags || []).some((t) => tagKey(t) === k)));
   return out;
 };
@@ -362,16 +364,19 @@ function toggleStatus(key) {
 
 function renderStatusBlock() {
   const box = $('#statusBlock');
-  const counts = { playing: 0, completed: 0 };
-  for (const g of state.games) if (counts[g.status] !== undefined) counts[g.status] += 1;
+  const counts = { playing: 0, completed: 0, planned: 0 };
+  for (const g of state.games) {
+    if (g.planned) counts.planned += 1;
+    else if (counts[g.status] !== undefined) counts[g.status] += 1;
+  }
   box.hidden = !state.games.length;
   if (box.hidden) { box.replaceChildren(); return; }
   box.replaceChildren(
     h('div', { class: 'tags-head' }, h('span', {}, 'Статус'),
       state.statusFilter ? h('button', { class: 'tags-reset', type: 'button', onClick: () => toggleStatus(state.statusFilter) }, 'Сбросить') : null),
-    h('div', { class: 'tags-list status-list' }, ['playing', 'completed'].map((k) => h('button', {
+    h('div', { class: 'tags-list status-list' }, ['playing', 'completed', 'planned'].map((k) => h('button', {
       class: `tag-item${state.statusFilter === k ? ' active' : ''}`, type: 'button', onClick: () => toggleStatus(k),
-    }, h('span', { class: 'tag-name' }, STATUS_LABEL[k]), h('span', { class: 'tag-count' }, String(counts[k]))))));
+    }, h('span', { class: 'tag-name' }, FILTER_LABEL[k]), h('span', { class: 'tag-count' }, String(counts[k]))))));
 }
 
 function tagFilterNames() {
@@ -528,7 +533,7 @@ const NO_TAGGED = 'Нет игр, подходящих под выбранные
 
 function filterTitle() {
   const parts = [];
-  if (state.statusFilter) parts.push(STATUS_LABEL[state.statusFilter]);
+  if (state.statusFilter) parts.push(FILTER_LABEL[state.statusFilter]);
   if (state.tagFilter.length) parts.push(`Теги: ${tagFilterNames().join(' + ')}`);
   return parts.join(' · ');
 }
@@ -1412,6 +1417,7 @@ function cardKeys(game, hero) {
 }
 
 const STATUS_LABEL = { '': 'Не начата', playing: 'Играю', completed: 'Пройдена' };
+const FILTER_LABEL = { ...STATUS_LABEL, planned: 'В планах' };   // подписи фильтра в сайдбаре: к статусам добавлены «В планах»
 
 function card(game, { chip = false, hero = false } = {}) {
   return h('div', {
@@ -1427,6 +1433,7 @@ function card(game, { chip = false, hero = false } = {}) {
     h('div', { class: 'cover' + (game.missing ? ' missing' : '') },
       coverNode(game),
       game.missing && h('span', { class: 'miss-badge' }, 'Файл не найден'),
+      game.planned && h('span', { class: 'miss-badge plan-badge' }, 'В планах'),
       game.favorite && h('span', { class: 'fav-badge', html: ICON.star }),
       game.status && h('span', { class: 'st-badge ' + game.status }, icon(game.status === 'completed' ? 'check' : 'play'), STATUS_LABEL[game.status]),
       chip && h('span', { class: 'chip' }, icon('clock'), formatLast(game.last_played)),
@@ -1459,7 +1466,7 @@ function row(game, hero) {
     h('div', { class: 'thumb' }, coverNode(game)),
     h('div', { style: 'min-width:0' },
       h('div', { class: 'r-name' }, game.name),
-      h('div', { class: 'r-path', title: game.exe_path }, game.missing ? 'Файл не найден — ' + game.exe_path : game.exe_path)),
+      h('div', { class: 'r-path', title: game.exe_path }, game.planned ? 'В планах: файл не указан' : game.missing ? 'Файл не найден — ' + game.exe_path : game.exe_path)),
     h('div', { class: 'r-time' }, formatLast(game.last_played)),
     h('button', { class: 'r-btn', type: 'button', title: 'Ещё', 'data-menu-trigger': true, onClick: (e) => { e.stopPropagation(); openMenu(e, game); } }, icon('more')),
     h('button', { class: 'r-btn play', type: 'button', title: 'Запустить', 'data-launch-id': game.id, onClick: (e) => { e.stopPropagation(); launch(game.id); } }, icon('play')));
@@ -1686,14 +1693,14 @@ function openMenu(e, game) {
   m.replaceChildren(
     game.running
       ? h('button', { class: 'is-running', type: 'button', disabled: true }, icon('play'), 'Играет')
-      : item('', 'play', 'Запустить', () => launch(game.id)),
+      : game.planned ? item('', 'folder', 'Привязать файл…', () => openEditModal(game.id)) : item('', 'play', 'Запустить', () => launch(game.id)),
     ...(game.running ? [] : (game.profiles || []).map((p) => item('profile', 'play', `Запустить: ${p.name}`, () => launch(game.id, p.id)))),
     item('', 'star', game.favorite ? 'Убрать из избранного' : 'В избранное', () => toggleFavorite(game.id)),
     item('', 'info', 'Подробнее', () => openDetails(game.id)),
     item('', 'edit', 'Изменить', () => openEditModal(game.id)),
-    h('hr'),
+    ...(game.planned ? [] : [h('hr'),
     item('', 'folder', 'Показать в папке', () => invoke('show_in_folder', { id: game.id }).catch((e) => toast(errText(e), 'error'))),
-    item('', 'copy', 'Копировать путь', () => invoke('copy_path', { id: game.id }).then(() => toast('Путь скопирован')).catch((e) => toast(errText(e), 'error'))),
+    item('', 'copy', 'Копировать путь', () => invoke('copy_path', { id: game.id }).then(() => toast('Путь скопирован')).catch((e) => toast(errText(e), 'error')))]),
     h('hr'),
     item('danger', 'trash', 'Убрать из библиотеки', () => removeGame(game.id)));
   m.hidden = false;
@@ -1830,7 +1837,7 @@ function openDetails(id) {
             game.last_played ? `Запускали: ${formatLast(game.last_played).toLowerCase()}` : 'Ещё не запускалась'))),
       h('dl', { class: 'kv' },
         h('dt', {}, 'Файл игры'),
-        h('dd', { class: 'mono' + (game.missing ? ' bad' : '') }, game.exe_path + (game.missing ? '  (не найден)' : '')),
+        h('dd', { class: 'mono' + (game.missing ? ' bad' : '') }, game.planned ? 'В планах: файл ещё не указан' : game.exe_path + (game.missing ? '  (не найден)' : '')),
         ...(game.args ? [h('dt', {}, 'Параметры'), h('dd', { class: 'mono' }, game.args)] : []),
         ...(game.workdir ? [h('dt', {}, 'Рабочая папка'), h('dd', { class: 'mono' }, game.workdir)] : []),
         ...(game.admin ? [h('dt', {}, 'Права'), h('dd', {}, 'Запуск от имени администратора')] : []),
@@ -2092,6 +2099,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
   const st = {
     name: game ? game.name : '',
     exe: game ? game.exe_path : '',
+    planned: game ? !!game.planned : false,   // «в планах»: файла запуска ещё нет
     args: game ? game.args || '' : '',
     workdir: game ? game.workdir || '' : '',
     admin: game ? !!game.admin : false,
@@ -2126,6 +2134,12 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     onClick: pickExe,
   });
   exeInput.value = st.exe;
+
+  const pathField = field('Путь к игре',
+    h('div', { class: 'pick-row' },
+      exeInput,
+      h('button', { class: 'btn ghost small', type: 'button', onClick: pickExe }, 'Обзор…')));
+  const plannedHint = h('p', { class: 'hint planned-hint', hidden: true }, 'Игра попадёт в список с пометкой «В планах». Когда появится файл, откройте «Изменить», снимите флажок и выберите файл: игра станет обычной.');
 
   const nameInput = h('input', {
     class: 'input', type: 'text', maxlength: '80', placeholder: 'Например, Elden Ring', spellcheck: 'false',
@@ -2219,12 +2233,20 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     h('span', { class: 'hint' }, 'Необязательно. Другие варианты запуска этой игры (оконный режим, мод, режим отладки). Запускаются из меню игры («Запустить: название»). Профиль целиком заменяет параметры, папку и права основного запуска.'));
   function syncArgs() {
     const ext = (st.exe.split('.').pop() || '').toLowerCase();
-    argsField.hidden = !ARGS_TYPES.includes(ext);
+    argsField.hidden = st.planned || !ARGS_TYPES.includes(ext);
     workdirField.hidden = argsField.hidden;
     adminField.hidden = argsField.hidden;
     profField.hidden = argsField.hidden;
   }
-  syncArgs();
+  /* «В планах»: путь и всё, что к нему привязано, скрыто; привязать файл можно позже, сняв флажок в «Изменить». */
+  const plannedField = checkbox('Пока нет файла игры (игра в планах)', () => st.planned, (v) => { st.planned = v; syncPlanned(); });
+  function syncPlanned() {
+    pathField.hidden = st.planned;
+    plannedHint.hidden = !st.planned;
+    syncArgs();
+    showError('');
+  }
+  syncPlanned();
 
   async function pickExe() {
     try {
@@ -2454,7 +2476,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
   const form = h('form', { class: 'form', novalidate: true, onSubmit: async (e) => {
     e.preventDefault();
     if (st.busy) return;
-    if (!st.exe) return showError('Выберите файл, которым запускается игра.');
+    if (!st.planned && !st.exe) return showError('Выберите файл, которым запускается игра или отметьте «Пока нет файла игры».');
     if (!st.name.trim()) { nameInput.focus(); return showError('Введите название игры.'); }
     if (st.hero.bg === 'banner' && !st.img.banner.url) {
       return showError('Выберите картинку для баннера или другой фон верхнего блока.');
@@ -2477,7 +2499,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
 
     const payload = {
       name: st.name.trim(),
-      exePath: st.exe,
+      exePath: st.planned ? '' : st.exe,
+      planned: st.planned,
       args: argsField.hidden ? '' : st.args.trim(),
       workdir: argsField.hidden ? '' : st.workdir,
       admin: argsField.hidden ? false : st.admin,
@@ -2489,6 +2512,8 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       tags: [...st.tags],
       images: Object.fromEntries(Object.entries(st.img).map(([k, v]) => [k, { mode: v.mode, path: v.path }])),
     };
+
+    if (st.planned && payload.images.icon.mode === 'exe') payload.images.icon = { mode: 'keep' };   // иконки из файла у игры в планах нет
 
     st.busy = true;
     submitBtn.disabled = true;
@@ -2504,10 +2529,9 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       submitBtn.disabled = false;
     }
   } },
-    field('Путь к игре',
-      h('div', { class: 'pick-row' },
-        exeInput,
-        h('button', { class: 'btn ghost small', type: 'button', onClick: pickExe }, 'Обзор…'))),
+    plannedField.node,
+    plannedHint,
+    pathField,
     h('label', { class: 'field' },
       h('span', { class: 'field-label' }, 'Название'),
       nameInput),
@@ -2541,7 +2565,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
 
   // Есть ли несохранённые данные (для защиты от случайного закрытия окна).
   const snap = () => JSON.stringify([
-    st.name.trim(), st.exe, st.hero, st.playtime, st.tags,
+    st.name.trim(), st.exe, st.planned, st.hero, st.playtime, st.tags,
     Object.values(st.img).map((v) => [v.mode === 'exe' && !st.iconTouched ? 'keep' : v.mode, v.path]), // автоиконку не считаем правкой
   ]);
   let initial = snap();

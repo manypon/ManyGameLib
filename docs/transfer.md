@@ -17,6 +17,7 @@ Settings → Library → "Перенос библиотеки" saves all games t
 - Game ids are not exported: every import creates new ones.
 - Image fields hold a path inside the archive (`icons/0-icon.png`), or `null` if the game has no such image or its file is missing on disk.
 - Settings, the app background and backups are not part of the archive. Only the games.
+- A game in plans is exported with an empty `exe_path` and `planned: true`; on import such a record is accepted without a path and a repeat is recognized by the name (case-insensitive). A record with an empty path but without `planned: true` is still skipped.
 - `exe_path` is written as it is. The games must be at the same paths on the other computer, otherwise they show "File not found" (see [Storage](storage.md)).
 
 ## Export

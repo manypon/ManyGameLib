@@ -71,8 +71,8 @@ Preload-скрипт отдаёт `window.api` из семи членов:
 | `get_missing` | нет | id игр, файлов которых больше нет |
 | `get_assets` | `{ id }` | `{ icon, banner, logo }` в виде data URL (или `null`) |
 | `preview_image` | `{ path }` | data URL выбранного файла до сохранения |
-| `add_game` | `{ name, exePath, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }` | Представление новой игры |
-| `update_game` | `{ id, name, exePath, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }` | Обновлённое представление игры; если `tags`, `playtimeSec`, `workdir`, `admin`, `note` или `status` не присланы, остаётся сохранённое |
+| `add_game` | `{ name, exePath, planned, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }` | Представление новой игры |
+| `update_game` | `{ id, name, exePath, planned, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }` | Обновлённое представление игры; если `tags`, `playtimeSec`, `workdir`, `admin`, `note` или `status` не присланы, остаётся сохранённое |
 | `rename_tag` | `{ from, to }` | Представления изменённых игр. Переименовывает тег во всех играх (пустой `to` убирает его); см. [Теги](ui_RU.md#теги) |
 | `launch_game` | `{ id, profile? }` | Представление игры с новым `last_played` и `running: true`; уже идущая игра возвращается как есть |
 | `toggle_favorite` | `{ id }` | Обновлённое представление игры |

@@ -15,7 +15,7 @@ All UI state lives in one object:
 | `heroId` | The game currently shown in the top block (`null` if there is no top block on screen) |
 | `view` | `library`, `favorites`, `recent` or `settings` |
 | `query` | The search text |
-| `statusFilter` | `''`, `'playing'` or `'completed'`: the status filter from the sidebar "Статус" block, see [Status filter](#status-filter) |
+| `statusFilter` | `''`, `'playing'`, `'completed'` or `'planned'`: the status filter from the sidebar "Статус" block, see [Status filter](#status-filter) |
 | `tagFilter` | The selected tags (lower case); a game must have all of them, see [Tags](#tags) |
 | `sort` | `name`, `added`, `played` or `playtime` (most played first) |
 | `layout` | `grid` or `list` |
@@ -82,6 +82,10 @@ A game has a status "Не начата" (default), "Играю" or "Пройде
 ## Search
 
 The search field updates `state.query` after a **150 ms pause** in typing, not on every keystroke, because each update re-renders the screen. Switching section or adding a game clears the field and cancels any pending update, so an old query cannot come back. Search matches the game name **and the note**, case-insensitively, as a substring.
+
+## Planned games
+
+A game can be added without a file: tick "Пока нет файла игры (игра в планах)" in the form. The path field, arguments, working folder, administrator flag and launch profiles are then hidden, only the name (and the optional cover, tags, note, status) is needed, and the main process stores an empty `exe_path` (`add_game` / `update_game` with `planned: true` clear the path and the launch fields themselves). The card gets a "В планах" badge instead of "Файл не найден", and the sidebar "Статус" block gets a third item "В планах" with its count (filter value `'planned'`, matched by `game.planned`, not by `status`). Pressing play, or "Привязать файл…" in the game menu, opens the edit form with a hint instead of launching (`launch_game` itself answers "Игра в планах: сначала укажите файл запуска"). "Показать в папке" and "Копировать путь" are hidden for such a game. To make it a normal game, open "Изменить", untick the box and choose the file: the usual checks (the file exists, it is not in the library yet) apply, and the icon can then be taken from the file.
 
 ## Status filter
 

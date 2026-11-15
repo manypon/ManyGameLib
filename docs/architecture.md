@@ -71,8 +71,8 @@ The preload script exposes `window.api` with seven members:
 | `get_missing` | none | Ids of games whose file no longer exists |
 | `get_assets` | `{ id }` | `{ icon, banner, logo }` as data URLs (or `null`) |
 | `preview_image` | `{ path }` | Data URL for a picked file, before saving |
-| `add_game` | `{ name, exePath, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }` | The new game view |
-| `update_game` | `{ id, name, exePath, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }` | The updated game view; a missing `tags`, `playtimeSec`, `workdir`, `admin`, `note` or `status` leaves the stored value |
+| `add_game` | `{ name, exePath, planned, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }` | The new game view |
+| `update_game` | `{ id, name, exePath, planned, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }` | The updated game view; a missing `tags`, `playtimeSec`, `workdir`, `admin`, `note` or `status` leaves the stored value |
 | `rename_tag` | `{ from, to }` | The views of the changed games. Renames a tag in all games (an empty `to` removes it); see [Tags](ui.md#tags) |
 | `launch_game` | `{ id, profile? }` | The game view with the new `last_played` and `running: true`; a game that is already running is returned as is |
 | `toggle_favorite` | `{ id }` | The updated game view |
