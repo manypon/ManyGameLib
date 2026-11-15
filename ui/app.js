@@ -245,12 +245,12 @@ function unlockLaunch(id) {
   refreshLaunchButtons();
 }
 
-async function launch(id) {
+async function launch(id, profile) {
   const game = state.games.find((g) => g.id === id);
   if (!game || game.running || launching.has(id)) return; // уже идёт или запускается: повторное нажатие игнорируем
   lockLaunch(id);
   try {
-    const updated = await invoke('launch_game', { id });
+    const updated = await invoke('launch_game', profile ? { id, profile } : { id });
     upsert(updated);
     toast(updated.running ? `«${game.name}» запущена` : `Запускаю «${game.name}»`);
   } catch (e) {
@@ -1638,6 +1638,7 @@ function openMenu(e, game) {
     game.running
       ? h('button', { class: 'is-running', type: 'button', disabled: true }, icon('play'), 'Играет')
       : item('', 'play', 'Запустить', () => launch(game.id)),
+    ...(game.running ? [] : (game.profiles || []).map((p) => item('profile', 'play', `Запустить: ${p.name}`, () => launch(game.id, p.id)))),
     item('', 'star', game.favorite ? 'Убрать из избранного' : 'В избранное', () => toggleFavorite(game.id)),
     item('', 'info', 'Подробнее', () => openDetails(game.id)),
     item('', 'edit', 'Изменить', () => openEditModal(game.id)),
@@ -1784,6 +1785,7 @@ function openDetails(id) {
         ...(game.args ? [h('dt', {}, 'Параметры'), h('dd', { class: 'mono' }, game.args)] : []),
         ...(game.workdir ? [h('dt', {}, 'Рабочая папка'), h('dd', { class: 'mono' }, game.workdir)] : []),
         ...(game.admin ? [h('dt', {}, 'Права'), h('dd', {}, 'Запуск от имени администратора')] : []),
+        ...((game.profiles || []).length ? [h('dt', {}, 'Профили'), h('dd', { class: 'tag-row' }, game.profiles.map((p) => h('span', { class: 'tag-pill', title: [p.args, p.workdir, p.admin ? 'от администратора' : ''].filter(Boolean).join(' · ') || 'Без изменений' }, p.name)))] : []),
         h('dt', {}, 'Прохождение'),
         h('dd', {}, STATUS_LABEL[game.status || '']),
         ...(game.note ? [h('dt', {}, 'Заметка'), h('dd', { class: 'note-text' }, game.note)] : []),
@@ -2044,6 +2046,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     args: game ? game.args || '' : '',
     workdir: game ? game.workdir || '' : '',
     admin: game ? !!game.admin : false,
+    profiles: game ? (game.profiles || []).map((p) => ({ ...p })) : [],
     note: game ? game.note || '' : '',
     status: game ? game.status || '' : '',
     playtime: game && game.playtime_sec > 0 ? String(Math.round(game.playtime_sec / 36) / 100).replace('.', ',') : '',   // часы, до сотых
@@ -2093,6 +2096,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
 
   // Параметры запуска: поле видно только для файлов, которым main.js их передаёт (exe, com, jar).
   const ARGS_TYPES = ['exe', 'com', 'jar'];
+  const MAX_PROFILES = 8;
   const argsInput = h('input', {
     class: 'input', type: 'text', maxlength: '1000', spellcheck: 'false', placeholder: '-windowed -nolauncher',
     onInput: (e) => { st.args = e.target.value; },
@@ -2126,11 +2130,50 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
   const adminBox = checkbox('Запускать от имени администратора', () => st.admin, (v) => { st.admin = v; });
   const adminField = h('div', { class: 'field' }, adminBox.node,
     h('span', { class: 'hint' }, 'Windows покажет запрос UAC при каждом запуске. Время в игре при этом считается.'));
+  /* Профили запуска: свои параметры, папка и права. Новый профиль берёт значения из основных полей. */
+  const profBox = h('div', { class: 'prof-list' });
+  const profAdd = h('button', { class: 'btn ghost small', type: 'button', onClick: () => {
+    if (st.profiles.length >= MAX_PROFILES) return;
+    st.profiles.push({ id: '', name: '', args: st.args.trim(), workdir: st.workdir, admin: st.admin });
+    drawProfiles();
+    const names = profBox.querySelectorAll('.prof-name');
+    if (names.length) names[names.length - 1].focus();
+  } }, icon('plus'), 'Добавить профиль');
+  function drawProfiles() {
+    profBox.replaceChildren(...st.profiles.map((p, i) => {
+      const name = h('input', { class: 'input prof-name', type: 'text', maxlength: '40', placeholder: 'Название, например «Окно» или «Мод»', onInput: (e) => { p.name = e.target.value; } });
+      name.value = p.name;
+      const args = h('input', { class: 'input', type: 'text', maxlength: '1000', spellcheck: 'false', placeholder: 'Параметры запуска', onInput: (e) => { p.args = e.target.value; } });
+      args.value = p.args;
+      const dir = h('input', { class: 'input', type: 'text', readonly: true, placeholder: 'Рабочая папка: как у игры' });
+      dir.value = p.workdir;
+      const pick = async () => {
+        try {
+          const picked = await dialog.open({ title: 'Выберите рабочую папку профиля', folder: true });
+          if (picked) { p.workdir = picked; dir.value = picked; showError(''); }
+        } catch (e) { showError(errText(e)); }
+      };
+      dir.addEventListener('click', pick);
+      return h('div', { class: 'prof-row' },
+        h('div', { class: 'pick-row' }, name,
+          h('button', { class: 'btn ghost small sq', type: 'button', title: 'Удалить профиль', onClick: () => { st.profiles.splice(i, 1); drawProfiles(); } }, icon('trash'))),
+        args,
+        h('div', { class: 'pick-row' }, dir,
+          h('button', { class: 'btn ghost small', type: 'button', onClick: pick }, 'Обзор…'),
+          h('button', { class: 'btn ghost small', type: 'button', title: 'Папка с файлом игры', onClick: () => { p.workdir = ''; dir.value = ''; } }, 'Сбросить')),
+        checkbox('От имени администратора', () => p.admin, (v) => { p.admin = v; }).node);
+    }));
+    profAdd.disabled = st.profiles.length >= MAX_PROFILES;
+  }
+  drawProfiles();
+  const profField = field('Профили запуска', profBox, profAdd,
+    h('span', { class: 'hint' }, 'Необязательно. Другие варианты запуска этой игры (оконный режим, мод, режим отладки). Запускаются из меню игры («Запустить: название»). Профиль целиком заменяет параметры, папку и права основного запуска.'));
   function syncArgs() {
     const ext = (st.exe.split('.').pop() || '').toLowerCase();
     argsField.hidden = !ARGS_TYPES.includes(ext);
     workdirField.hidden = argsField.hidden;
     adminField.hidden = argsField.hidden;
+    profField.hidden = argsField.hidden;
   }
   syncArgs();
 
@@ -2379,12 +2422,17 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
       playtimeSec = Math.round(hours * 3600);
     }
 
+    if (!argsField.hidden && st.profiles.some((p) => !p.name.trim())) {
+      return showError('Профиль запуска: укажите название или удалите профиль.');
+    }
+
     const payload = {
       name: st.name.trim(),
       exePath: st.exe,
       args: argsField.hidden ? '' : st.args.trim(),
       workdir: argsField.hidden ? '' : st.workdir,
       admin: argsField.hidden ? false : st.admin,
+      profiles: argsField.hidden ? [] : st.profiles.map((p) => ({ id: p.id, name: p.name.trim(), args: p.args.trim(), workdir: p.workdir, admin: p.admin })),
       note: st.note,
       status: st.status,
       playtimeSec,
@@ -2417,6 +2465,7 @@ function gameForm({ mode = 'add', game = null, assets = null, onDone, autofocus 
     argsField,
     workdirField,
     adminField,
+    profField,
     playtimeField,
     field('Иконка или обложка',
       h('div', { class: 'icon-row' },

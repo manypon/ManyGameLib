@@ -45,6 +45,10 @@ Two optional fields of a game, used for `.exe`, `.com` and `.jar` only (hidden i
   - If PowerShell is not found, the launch fails with a clear message. With this option the shell fallback is not used, and arguments work (they are passed to the elevated process).
   - The log records `[от администратора]`, never paths or arguments.
 
+## Launch profiles
+
+A game can have up to 8 profiles (`profiles` in [Storage](storage.md)): other ways to start the same file, each with its own `args`, `workdir` and `admin`. The main fields stay the default launch. `launch_game { id, profile }` finds the profile by id and passes its `args`, `workdir` and `admin` to `spawnGame()` **instead of** the main ones (nothing is merged); an unknown id fails with "Профиль запуска не найден". Everything else is the same: the same locks against double launch, the same session and playtime tracking (the time goes to the game, not to the profile), and the log line gets " / профиль «name»" (never arguments). The profiles are offered in the game menu as "Запустить: name"; the tray menu and the play buttons use the main launch.
+
 ## Java for `.jar`
 
 The app looks for `javaw.exe` in this order and uses the first one that exists:

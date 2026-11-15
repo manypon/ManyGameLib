@@ -842,3 +842,11 @@ textarea { font: inherit; color: inherit; }
 .gh-list li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 2px; border-top: 1px solid var(--border); color: var(--muted); }
 .gh-list li b { color: var(--text, inherit); font-weight: 600; }
 .glass .gh-stat { background: rgba(255, 255, 255, 0.06); }
+
+/* Профили запуска в форме игры */
+.prof-list { display: flex; flex-direction: column; gap: 10px; }
+.prof-list:empty { display: none; }
+.prof-row { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; }
+.prof-row .pick-row .input { flex: 1; min-width: 0; }
+#menu .profile { padding-left: 30px; }
+.glass .prof-row { background: rgba(255, 255, 255, 0.05); }

@@ -460,6 +460,7 @@ function view(g) {
     args: cleanArgs(g.args),
     workdir: cleanWorkdir(g.workdir),
     admin: g.admin === true,
+    profiles: cleanProfiles(g.profiles),
     note: cleanNote(g.note),
     status: cleanStatus(g.status),
     icon: readImage(g.icon_file),
@@ -556,6 +557,27 @@ function checkWorkdir(v) {
   const dir = cleanWorkdir(v);
   if (dir && !isDir(dir)) throw new Error('Рабочая папка не найдена. Выберите существующую папку или очистите поле.');
   return dir;
+}
+
+/* Профили запуска: до 8 вариантов запуска одной игры (свои параметры, рабочая папка, права администратора).
+   Основные поля игры args/workdir/admin остаются профилем «по умолчанию». check=true: при сохранении формы папки должны существовать. */
+const MAX_PROFILES = 8;
+const MAX_PROFILE_NAME = 40;
+function cleanProfiles(v, check = false) {
+  if (!Array.isArray(v)) return [];
+  const out = [];
+  const ids = new Set();
+  for (const p of v) {
+    if (!p || typeof p !== 'object') continue;
+    const name = String(p.name == null ? '' : p.name).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_PROFILE_NAME).trim();
+    if (!name) continue;
+    let id = typeof p.id === 'string' && /^[a-z0-9]{1,16}$/.test(p.id) ? p.id : '';
+    while (!id || ids.has(id)) id = Math.random().toString(36).slice(2, 10);
+    ids.add(id);
+    out.push({ id, name, args: cleanArgs(p.args), workdir: check ? checkWorkdir(p.workdir) : cleanWorkdir(p.workdir), admin: p.admin === true });
+    if (out.length >= MAX_PROFILES) break;
+  }
+  return out;
 }
 
 function parseArgs(str) {
@@ -1059,6 +1081,7 @@ function buildExport() {
       args: cleanArgs(g.args),
       workdir: cleanWorkdir(g.workdir),
       admin: g.admin === true,
+      profiles: cleanProfiles(g.profiles),
       note: cleanNote(g.note),
       status: cleanStatus(g.status),
       hero: normalizeHero(g.hero),
@@ -1151,7 +1174,7 @@ function mergeImport(buf) {
       }
       const num = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 && v !== null && v !== '' ? Math.floor(Number(v)) : null);
       added.push({
-        id, name, exe_path: exe, args: cleanArgs(rec.args), workdir: cleanWorkdir(rec.workdir), admin: rec.admin === true, note: cleanNote(rec.note), status: cleanStatus(rec.status), playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero), tags: cleanTags(rec.tags),
+        id, name, exe_path: exe, args: cleanArgs(rec.args), workdir: cleanWorkdir(rec.workdir), admin: rec.admin === true, profiles: cleanProfiles(rec.profiles), note: cleanNote(rec.note), status: cleanStatus(rec.status), playtime_sec: playtimeOf(rec), ...fields, hero: normalizeHero(rec.hero), tags: cleanTags(rec.tags),
         favorite: rec.favorite === true, last_played: num(rec.last_played), added_at: num(rec.added_at) ?? Date.now(),
       });
     }
@@ -1178,8 +1201,13 @@ function handle(channel, fn) {
 }
 
 /* Запуск игры по id. Общий для кнопки в окне и для пункта в меню трея. */
-async function launchGame(id) {
+async function launchGame(id, profileId) {
   const g = findGame(id);
+  let run = g;   // что запускаем: сама игра или её профиль (профиль целиком заменяет параметры, папку и права)
+  if (profileId) {
+    run = cleanProfiles(g.profiles).find((p) => p.id === profileId);
+    if (!run) throw new Error('Профиль запуска не найден. Возможно, его удалили.');
+  }
   if (sessions.has(id)) return view(g); // уже запущена: второй экземпляр не открываем
   const last = launchedAt.get(id);
   if (last && Date.now() - last < LAUNCH_LOCK_MS) return view(g); // игра только что запущена
@@ -1189,7 +1217,7 @@ async function launchGame(id) {
   launching.add(id);
   let child = null;
   try {
-    child = await spawnGame(g.exe_path, g.args, { workdir: g.workdir, admin: g.admin });
+    child = await spawnGame(g.exe_path, run.args, { workdir: run.workdir, admin: run.admin });
   } catch (e) {
     launchedAt.delete(id); // не запустилась, можно пробовать снова
     throw new Error(`Не удалось запустить игру: ${e.message}`);
@@ -1200,7 +1228,7 @@ async function launchGame(id) {
   saveGames();
   trackSession(id, child);
   refreshTrayMenu();   // в меню трея игра теперь «играет»
-  logLine('info', `запуск: ${g.name} (${g.exe_path})${cleanArgs(g.args) && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [с параметрами]' : ''}${g.admin === true && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [от администратора]' : ''}`);
+  logLine('info', `запуск: ${g.name}${run !== g ? ` / профиль «${run.name}»` : ''} (${g.exe_path})${cleanArgs(run.args) && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [с параметрами]' : ''}${run.admin === true && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [от администратора]' : ''}`);
   if (win && !win.isDestroyed()) win.webContents.send('game-updated', view(g));   // запуск мог быть из трея: окно скрыто, но должно знать
   return view(g);
 }
@@ -1398,11 +1426,12 @@ function registerHandlers() {
     return data ? `data:image/png;base64,${data.toString('base64')}` : null;
   });
 
-  handle('add_game', async ({ name, exePath, args, workdir, admin, note, status, playtimeSec, images, hero, tags }) => {
+  handle('add_game', async ({ name, exePath, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     name = cleanName(name);
     checkExe(exePath, null);
     const dir = checkWorkdir(workdir);
+    const profs = cleanProfiles(profiles, true);
     images = await prepareImages(images, exePath);
 
     let id = Date.now();
@@ -1413,7 +1442,7 @@ function registerHandlers() {
     // если исходные файлы удалят или переместят.
     const { fields, created } = applyImages(null, images, id);
     const game = {
-      id, name, exe_path: exePath, args: cleanArgs(args), workdir: dir, admin: admin === true, note: cleanNote(note), status: cleanStatus(status), playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero), tags: cleanTags(tags),
+      id, name, exe_path: exePath, args: cleanArgs(args), workdir: dir, admin: admin === true, profiles: profs, note: cleanNote(note), status: cleanStatus(status), playtime_sec: playtime || 0, ...fields, hero: normalizeHero(hero), tags: cleanTags(tags),
       favorite: false, last_played: null, added_at: Date.now(),
     };
     try {
@@ -1425,12 +1454,13 @@ function registerHandlers() {
     return view(game);
   });
 
-  handle('update_game', async ({ id, name, exePath, args, workdir, admin, note, status, playtimeSec, images, hero, tags }) => {
+  handle('update_game', async ({ id, name, exePath, args, workdir, admin, profiles, note, status, playtimeSec, images, hero, tags }) => {
     const playtime = cleanPlaytime(playtimeSec);
     const old = findGame(id);
     name = cleanName(name);
     checkExe(exePath, id);
     const dir = workdir === undefined ? undefined : checkWorkdir(workdir);
+    const profs = profiles === undefined ? undefined : cleanProfiles(profiles, true);
     images = await prepareImages(images, exePath);
 
     const { fields, created, obsolete } = applyImages(old, images, id);
@@ -1439,6 +1469,7 @@ function registerHandlers() {
     if (tags !== undefined) next.tags = cleanTags(tags);        // то же для тегов
     if (dir !== undefined) next.workdir = dir;                  // и для рабочей папки и запуска от администратора
     if (admin !== undefined) next.admin = admin === true;
+    if (profs !== undefined) next.profiles = profs;
     if (note !== undefined) next.note = cleanNote(note);
     if (status !== undefined) next.status = cleanStatus(status);
     try {
@@ -1451,7 +1482,7 @@ function registerHandlers() {
     return view(next);
   });
 
-  handle('launch_game', ({ id }) => launchGame(id));
+  handle('launch_game', ({ id, profile }) => launchGame(id, profile));
 
   handle('toggle_favorite', ({ id }) => {
     const g = findGame(id);
