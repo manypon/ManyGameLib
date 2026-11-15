@@ -46,6 +46,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu. While a game is running, its button shows "Играет" and it cannot be started a second time.
+- **Games in the tray menu:** while the app is in the tray, its icon menu lists the last 5 launched games; a click starts one.
 - **Tray:** the window's cross asks whether to hide the app to the tray or quit (with a "remember" checkbox, changeable in Settings). Autostart can open the app straight into the tray.
 - **Settings page:** an app background (a bundled picture, your own or none) with blur and dimming sliders, an option to turn off the top block card, autostart with Windows, an optional log file, and a custom Java path for `.jar` files. The app background can be an animated GIF (up to 40 MB).
 - **Updates:** the app checks GitHub for a newer version (can be turned off in Settings). With the installer it downloads and installs the update on your button; the portable folder only points you to the release page.

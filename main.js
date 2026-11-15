@@ -179,6 +179,7 @@ function saveGames() {
     throw new Error(`Не удалось сохранить библиотеку: ${e.message}`);
   }
   scheduleAchievements();
+  refreshTrayMenu();
 }
 
 /* Заменяет список игр и сохраняет его на диск. Если запись не удалась,
@@ -1015,6 +1016,7 @@ function endSession(id) {
   if (!s) return;
   sessions.delete(id);
   addPlaytime(id, Math.round((Date.now() - s.start) / 1000), s.start);
+  refreshTrayMenu();
   const g = games.find((x) => x.id === id);
   if (g && win && !win.isDestroyed()) win.webContents.send('game-updated', view(g)); // снять «Играет»
 }
@@ -1173,6 +1175,34 @@ function handle(channel, fn) {
       return { error: message };
     }
   });
+}
+
+/* Запуск игры по id. Общий для кнопки в окне и для пункта в меню трея. */
+async function launchGame(id) {
+  const g = findGame(id);
+  if (sessions.has(id)) return view(g); // уже запущена: второй экземпляр не открываем
+  const last = launchedAt.get(id);
+  if (last && Date.now() - last < LAUNCH_LOCK_MS) return view(g); // игра только что запущена
+  if (!isFile(g.exe_path)) throw new Error(`Файл игры не найден: ${g.exe_path}`);
+  if (launching.has(id)) return view(g);   // идёт запуск (например, открыто окно UAC)
+  launchedAt.set(id, Date.now()); // ставим сразу, чтобы второй запрос не прошёл, пока идёт первый
+  launching.add(id);
+  let child = null;
+  try {
+    child = await spawnGame(g.exe_path, g.args, { workdir: g.workdir, admin: g.admin });
+  } catch (e) {
+    launchedAt.delete(id); // не запустилась, можно пробовать снова
+    throw new Error(`Не удалось запустить игру: ${e.message}`);
+  } finally {
+    launching.delete(id);
+  }
+  g.last_played = Date.now();
+  saveGames();
+  trackSession(id, child);
+  refreshTrayMenu();   // в меню трея игра теперь «играет»
+  logLine('info', `запуск: ${g.name} (${g.exe_path})${cleanArgs(g.args) && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [с параметрами]' : ''}${g.admin === true && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [от администратора]' : ''}`);
+  if (win && !win.isDestroyed()) win.webContents.send('game-updated', view(g));   // запуск мог быть из трея: окно скрыто, но должно знать
+  return view(g);
 }
 
 function registerHandlers() {
@@ -1421,30 +1451,7 @@ function registerHandlers() {
     return view(next);
   });
 
-  handle('launch_game', async ({ id }) => {
-    const g = findGame(id);
-    if (sessions.has(id)) return view(g); // уже запущена: второй экземпляр не открываем
-    const last = launchedAt.get(id);
-    if (last && Date.now() - last < LAUNCH_LOCK_MS) return view(g); // игра только что запущена
-    if (!isFile(g.exe_path)) throw new Error(`Файл игры не найден: ${g.exe_path}`);
-    if (launching.has(id)) return view(g);   // идёт запуск (например, открыто окно UAC)
-    launchedAt.set(id, Date.now()); // ставим сразу, чтобы второй запрос не прошёл, пока идёт первый
-    launching.add(id);
-    let child = null;
-    try {
-      child = await spawnGame(g.exe_path, g.args, { workdir: g.workdir, admin: g.admin });
-    } catch (e) {
-      launchedAt.delete(id); // не запустилась, можно пробовать снова
-      throw new Error(`Не удалось запустить игру: ${e.message}`);
-    } finally {
-      launching.delete(id);
-    }
-    g.last_played = Date.now();
-    saveGames();
-    trackSession(id, child);
-    logLine('info', `запуск: ${g.name} (${g.exe_path})${cleanArgs(g.args) && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [с параметрами]' : ''}${g.admin === true && ARGS_TYPES.includes(extOf(g.exe_path)) ? ' [от администратора]' : ''}`);
-    return view(g);
-  });
+  handle('launch_game', ({ id }) => launchGame(id));
 
   handle('toggle_favorite', ({ id }) => {
     const g = findGame(id);
@@ -1601,6 +1608,35 @@ function showWindow() {
   win.focus();
 }
 
+const TRAY_RECENT = 5;
+
+/* Пункты меню трея: открыть окно, последние запущенные игры (до 5), выход. Игры берутся по id из библиотеки в момент запуска. */
+function trayTemplate() {
+  const recent = games.filter((g) => g.last_played).sort((a, b) => b.last_played - a.last_played).slice(0, TRAY_RECENT);
+  const items = [{ label: 'Открыть ManyGameLib', click: showWindow }];
+  if (recent.length) {
+    items.push({ type: 'separator' }, { label: 'Недавние игры', enabled: false });
+    for (const g of recent) {
+      const name = String(g.name).slice(0, 40);
+      items.push({
+        label: sessions.has(g.id) ? `${name} (играет)` : name,
+        enabled: !sessions.has(g.id),
+        click: () => {
+          launchGame(g.id).catch((e) => { logLine('error', `запуск из трея: ${e.message}`); dialog.showErrorBox('ManyGameLib', e.message); });
+        },
+      });
+    }
+  }
+  items.push({ type: 'separator' }, { label: 'Выйти', click: () => app.quit() });
+  return items;
+}
+
+/* Пока значок в трее есть, список недавних игр держим свежим. */
+function refreshTrayMenu() {
+  if (!tray) return;
+  try { tray.setContextMenu(Menu.buildFromTemplate(trayTemplate())); } catch (e) { logLine('error', `меню трея: ${e.message}`); }
+}
+
 /* Прячет окно и ставит значок возле часов. Если значок создать не вышло, окно прятать нельзя: вернуть его будет нечем. */
 function hideToTray() {
   if (!win || win.isDestroyed()) return false;
@@ -1610,11 +1646,7 @@ function hideToTray() {
       tray = new Tray(img);
       tray.setToolTip('ManyGameLib');
       tray.on('click', showWindow);
-      tray.setContextMenu(Menu.buildFromTemplate([
-        { label: 'Открыть ManyGameLib', click: showWindow },
-        { type: 'separator' },
-        { label: 'Выйти', click: () => app.quit() },
-      ]));
+      tray.setContextMenu(Menu.buildFromTemplate(trayTemplate()));
     } catch (e) {
       logLine('error', `трей: ${e.message}`);
       if (tray) { try { tray.destroy(); } catch { /* ignore */ } }

@@ -2,7 +2,7 @@
 
 [English](launching.md) | [Русский](launching_RU.md)
 
-Launching is handled entirely by the main process (`spawnGame()` in `main.js`). The UI only sends `launch_game { id }`.
+Launching is handled entirely by the main process (`spawnGame()` in `main.js`). The UI only sends `launch_game { id }`; the handler just calls `launchGame(id)`, which the tray menu uses too.
 
 ## What happens on `launch_game`
 
