@@ -23,7 +23,8 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
   "checkUpdates": true,
   "closeAction": "ask",
   "startMinimized": false,
-  "autoBackup": { "enabled": false, "folder": "", "everyDays": 7, "keep": 5 }
+  "autoBackup": { "enabled": false, "folder": "", "everyDays": 7, "keep": 5 },
+  "discord": { "enabled": false, "clientId": "", "showName": true }
 }
 ```
 
@@ -45,6 +46,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 | `closeAction` | `ask`, `tray`, `quit` | `ask` | What the window's cross does: ask, hide to the tray, or quit (see "Tray") |
 | `startMinimized` | `true` / `false` | `false` | When started by Windows autostart, open straight into the tray |
 | `autoBackup` | object | see below | Automatic library copies: `enabled` (off by default, can be on only with a folder), `folder` (an absolute path), `everyDays` (1, 3, 7, 14 or 30), `keep` (1 to 30 copies) |
+| `discord` | object | see below | Discord Rich Presence: `enabled` (off by default, only with a valid `clientId`), `clientId` (Application ID, 17 to 20 digits), `showName` (show the game name, default `true`) |
 | `javaPath` | string up to 500 chars | `""` | A specific `javaw.exe` for `.jar` files; empty means "search automatically" |
 
 ## Reading, validating, saving
@@ -57,7 +59,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 - `background.file` is accepted only if it is a bare file name (`path.basename(x) === x`), so a hand-edited file cannot point outside `icons\`;
 - `mode: custom` without a file becomes `default`.
 
-**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `theme`, `accent`, `glassAlpha`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, `autoBackup.enabled/everyDays/keep`, and `background.mode/blur/dim`). The page can never set `background.file` or `autoBackup.folder` directly; they are changed only by `set_wallpaper` / `clear_wallpaper` and by `set_backup_folder` / `clear_backup_folder`, which open the folder dialog in the main process.
+**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `theme`, `accent`, `glassAlpha`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, `autoBackup.enabled/everyDays/keep`, `discord.enabled/clientId/showName`, and `background.mode/blur/dim`). The page can never set `background.file` or `autoBackup.folder` directly; they are changed only by `set_wallpaper` / `clear_wallpaper` and by `set_backup_folder` / `clear_backup_folder`, which open the folder dialog in the main process.
 
 **`saveSettings(next)`** writes `settings.json.tmp`, copies the current file to `settings.json.bak`, then renames the temporary file over the real one (with the same short retry on locked files as the library).
 
@@ -191,6 +193,16 @@ If the tray icon cannot be created, the window is not hidden (there would be no 
 - **Commands.** `get_backup_info` returns `{ enabled, folder, everyDays, keep, count, last, error }`, `backup_now` makes a copy at once (errors are shown to the user), the schedule itself is changed with `save_settings { autoBackup: { enabled, everyDays, keep } }`.
 - **Not the same as** `backups/` in the data folder (one copy of `games.json` per start, see [Storage](storage.md)): that one protects against a damaged file, auto copies protect against losing the whole disk when the folder is on another drive or in a cloud folder.
 - The log gets `автокопия: N игр в <file>` and, on failure, a warning with the reason.
+
+## Discord Rich Presence
+
+`discord.js` plus `presenceSync()` in `main.js`. Settings → General → "Discord". Off by default and never switched on without the user.
+
+- **What is shown.** While a game started from ManyGameLib is running, Discord shows "Playing <name of your Discord application>" with the game name (or "Играет в игру" when `showName` is off), the line "через ManyGameLib" and the elapsed time from the start of the session. Only these texts and the start time leave the app; no paths, no library data.
+- **Application ID.** Discord needs an application of your own: create it at discord.com/developers (its name is what people see after "Playing"), copy the Application ID and paste it into the settings (17 to 20 digits; `normalizeDiscord()` drops anything else, and without an ID the switch cannot be turned on). The page may change `clientId` because it is only a number that is sent to the local Discord client.
+- **How.** The Discord desktop client listens on a local pipe `\\?\pipe\discord-ipc-0` to `-9` (a socket in the temp folder on other systems). `discord.js` tries them in turn, sends the handshake `{ v: 1, client_id }`, waits for `READY` and then sends `SET_ACTIVITY` frames (an `int32` code, an `int32` length and JSON). `PING` is answered with `PONG`. No libraries and no network: everything stays on this computer.
+- **When.** `presenceSync()` runs when a session starts or ends and when the `discord` settings change. It shows the most recently started running game; when there is none (or the feature is off) it sends an empty activity and closes the connection, and the app quits the same way. A launch profile or a launch from the tray changes nothing: any session counts.
+- **Failures.** A closed Discord, a missing pipe or a wrong Application ID never affect launching or the playtime: the error is written to the log (`Discord: …`) and shown on the page (`get_discord_info` returns `{ connected, error }`). The next session tries again.
 
 ## The Settings page
 

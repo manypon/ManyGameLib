@@ -1060,6 +1060,43 @@ async function resetSettings() {
   render();
 }
 
+/* Discord Rich Presence: по желанию, по умолчанию выключен. Нужен Application ID своего приложения Discord. */
+async function refreshDiscord() {
+  try { state.discord = await invoke('get_discord_info'); } catch { state.discord = { connected: false, error: '' }; }
+  if (state.view === 'settings') render();
+}
+
+function discordCard() {
+  const st = state.settings;
+  if (!st || !st.discord) return settingsCard('Discord', 'Загрузка…');
+  const dc = st.discord;
+  const input = h('input', { class: 'input', type: 'text', inputmode: 'numeric', maxlength: '20', placeholder: 'Application ID, 17–20 цифр', spellcheck: false, autocomplete: 'off' });
+  input.value = dc.clientId;
+  const save = async () => {
+    const v = input.value.trim();
+    if (v && !/^\d{17,20}$/.test(v)) return toast('Application ID состоит из 17–20 цифр', 'error');
+    dc.clientId = v;
+    if (!v) dc.enabled = false;
+    await saveSettingsPatch({ discord: { clientId: v, ...(v ? {} : { enabled: false }) } });
+    toast(v ? 'Application ID сохранён' : 'Application ID удалён');
+    render();   // переключатель «Показывать статус» становится доступным или нет
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  const info = state.discord;
+  if (info === undefined && dc.enabled) refreshDiscord();
+  return settingsCard('Discord', 'Показывать в профиле Discord, во что вы играете сейчас. Выключено по умолчанию; наружу уходят только название игры и время начала',
+    settingRow('Application ID', 'Создайте приложение на discord.com/developers (его имя увидят в статусе: «Играет в <имя>») и вставьте его Application ID',
+      h('div', { class: 's-buttons' }, input,
+        h('button', { class: 'btn primary small', type: 'button', onClick: save }, 'Сохранить'),
+        h('button', { class: 'btn ghost small', type: 'button', onClick: () => invoke('open_external', { target: 'discord_dev' }).catch((e) => toast(errText(e), 'error')) }, 'Открыть'))),
+    settingRow('Показывать статус', 'Пока игра запущена из ManyGameLib; Discord должен быть открыт',
+      toggle(dc.enabled, (on) => { dc.enabled = on; state.discord = undefined; render(); saveSettingsPatch({ discord: { enabled: on } }).then(() => on && refreshDiscord()); }, !dc.clientId)),
+    settingRow('Показывать название игры', 'Если выключить, вместо названия будет «Играет в игру»',
+      toggle(dc.showName, (on) => { dc.showName = on; saveSettingsPatch({ discord: { showName: on } }); })),
+    dc.enabled && info && settingRow('Состояние', null,
+      h('span', { class: info.error ? 's-bad' : '' }, info.error ? `Не получилось: ${info.error}` : info.connected ? 'Подключено к Discord' : 'Ждёт запуска игры')));
+}
+
 function generalPanel() {
   ensureAppInfo();
   const st = state.settings;
@@ -1087,6 +1124,7 @@ function generalPanel() {
   }
   return [
     settingsCard('Общие настройки', 'Основные параметры приложения', rows),
+    discordCard(),
     settingsCard('Сброс', 'Вернуть настройки по умолчанию',
       settingRow('Сбросить настройки', 'Игры и библиотека не затрагиваются',
         h('button', { class: 'btn danger small', type: 'button', onClick: resetSettings }, 'Сбросить'))),

@@ -23,7 +23,8 @@
   "checkUpdates": true,
   "closeAction": "ask",
   "startMinimized": false,
-  "autoBackup": { "enabled": false, "folder": "", "everyDays": 7, "keep": 5 }
+  "autoBackup": { "enabled": false, "folder": "", "everyDays": 7, "keep": 5 },
+  "discord": { "enabled": false, "clientId": "", "showName": true }
 }
 ```
 
@@ -45,6 +46,7 @@
 | `closeAction` | `ask`, `tray`, `quit` | `ask` | Что делает крестик окна: спросить, спрятать в трей или выйти (см. «Трей») |
 | `startMinimized` | `true` / `false` | `false` | При запуске автозапуском Windows сразу открываться в трее |
 | `autoBackup` | объект | см. ниже | Автокопии библиотеки: `enabled` (по умолчанию выкл., включить можно только при выбранной папке), `folder` (абсолютный путь), `everyDays` (1, 3, 7, 14 или 30), `keep` (от 1 до 30 копий) |
+| `discord` | объект | см. ниже | Discord Rich Presence: `enabled` (по умолчанию выкл., только при верном `clientId`), `clientId` (Application ID, 17–20 цифр), `showName` (показывать название игры, по умолчанию `true`) |
 | `javaPath` | строка до 500 символов | `""` | Конкретный `javaw.exe` для `.jar`; пусто означает «искать автоматически» |
 
 ## Чтение, проверка, сохранение
@@ -57,7 +59,7 @@
 - `background.file` принимается, только если это простое имя файла (`path.basename(x) === x`), поэтому вручную исправленный файл не может указать за пределы `icons\`;
 - `mode: custom` без файла становится `default`.
 
-**`mergeSettings(patch)`** накладывает частичное изменение на текущие настройки. Копируются только известные ключи (`heroBackground`, `theme`, `accent`, `glassAlpha`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, `autoBackup.enabled/everyDays/keep` и `background.mode/blur/dim`). Страница не может задать напрямую `background.file` и `autoBackup.folder`: их меняют только `set_wallpaper` / `clear_wallpaper` и `set_backup_folder` / `clear_backup_folder`, которые открывают окно выбора папки в главном процессе.
+**`mergeSettings(patch)`** накладывает частичное изменение на текущие настройки. Копируются только известные ключи (`heroBackground`, `theme`, `accent`, `glassAlpha`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, `autoBackup.enabled/everyDays/keep`, `discord.enabled/clientId/showName` и `background.mode/blur/dim`). Страница не может задать напрямую `background.file` и `autoBackup.folder`: их меняют только `set_wallpaper` / `clear_wallpaper` и `set_backup_folder` / `clear_backup_folder`, которые открывают окно выбора папки в главном процессе.
 
 **`saveSettings(next)`** пишет `settings.json.tmp`, копирует текущий файл в `settings.json.bak`, затем переименовывает временный файл поверх настоящего (с тем же коротким повтором при занятом файле, что и у библиотеки).
 
@@ -191,6 +193,16 @@
 - **Команды.** `get_backup_info` возвращает `{ enabled, folder, everyDays, keep, count, last, error }`, `backup_now` делает копию сразу (ошибки показываются пользователю), само расписание меняется через `save_settings { autoBackup: { enabled, everyDays, keep } }`.
 - **Не то же самое, что** `backups/` в папке данных (по одной копии `games.json` за запуск, см. [Хранилище](storage_RU.md)): та защищает от повреждённого файла, автокопии защищают от потери всего диска, если папка на другом диске или в облаке.
 - В журнал пишется `автокопия: N игр в <файл>` и при сбое предупреждение с причиной.
+
+## Discord Rich Presence
+
+`discord.js` и `presenceSync()` в `main.js`. Настройки → Общие → «Discord». По умолчанию выключено и без участия пользователя не включается.
+
+- **Что показывается.** Пока запущена игра из ManyGameLib, Discord показывает «Играет в <имя вашего приложения Discord>», название игры (или «Играет в игру», если `showName` выключен), строку «через ManyGameLib» и время с начала сессии. Из приложения уходят только эти тексты и время начала: ни путей, ни данных библиотеки.
+- **Application ID.** Для Discord нужно собственное приложение: создайте его на discord.com/developers (его имя люди увидят после «Играет в»), скопируйте Application ID и вставьте в настройки (17–20 цифр; `normalizeDiscord()` отбрасывает всё остальное, а без ID переключатель включить нельзя). Страница может менять `clientId`, потому что это просто число, которое уходит локальному клиенту Discord.
+- **Как.** Приложение Discord слушает локальный канал `\\?\pipe\discord-ipc-0` … `-9` (на других системах сокет во временной папке). `discord.js` пробует их по очереди, отправляет рукопожатие `{ v: 1, client_id }`, ждёт `READY` и затем шлёт кадры `SET_ACTIVITY` (код `int32`, длина `int32` и JSON). На `PING` отвечает `PONG`. Библиотек и сети нет: всё остаётся на этом компьютере.
+- **Когда.** `presenceSync()` вызывается при начале и конце сессии и при смене настроек `discord`. Показывается самая недавно запущенная игра; когда игр нет (или функция выключена), отправляется пустой статус и соединение закрывается, так же при выходе из приложения. Профиль запуска и запуск из трея ничего не меняют: считается любая сессия.
+- **Сбои.** Закрытый Discord, отсутствие канала или неверный Application ID никогда не влияют на запуск и учёт времени: ошибка пишется в журнал (`Discord: …`) и показывается на странице (`get_discord_info` возвращает `{ connected, error }`). Со следующей сессией попытка повторяется.
 
 ## Страница настроек
 

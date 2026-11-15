@@ -10,6 +10,7 @@ const { createUpdater } = require('./updater');
 const { createSgdb } = require('./sgdb');
 const { createHistory } = require('./history');
 const autobackup = require('./autobackup');
+const { createDiscord, ID_RE: DISCORD_ID_RE } = require('./discord');
 const { evaluate: evalAchievements, COUNTERS } = require('./achievements');
 
 const REPO_URL = 'https://github.com/manypon/ManyGameLib';
@@ -272,6 +273,7 @@ const SETTINGS_DEFAULTS = {
   checkUpdates: true,    // проверять наличие новой версии при запуске
   closeAction: 'ask',    // что делает крестик окна: ask (спросить), tray (в трей), quit (закрыть)
   startMinimized: false, // при автозапуске Windows открываться сразу в трее
+  discord: { enabled: false, clientId: '', showName: true },   // Discord Rich Presence (по желанию; нужен Application ID)
   autoBackup: { enabled: false, folder: '', everyDays: 7, keep: 5 }, // автокопии библиотеки (папку выбирает только главный процесс)
 };
 const CLOSE_ACTIONS = ['ask', 'tray', 'quit'];
@@ -312,7 +314,14 @@ function normalizeSettings(raw) {
     startMinimized: typeof r.startMinimized === 'boolean' ? r.startMinimized : d.startMinimized,
     javaPath: typeof r.javaPath === 'string' ? r.javaPath.trim().slice(0, 500) : d.javaPath,
     autoBackup: normalizeAutoBackup(r.autoBackup),
+    discord: normalizeDiscord(r.discord),
   };
+}
+
+function normalizeDiscord(v) {
+  const r = v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  const clientId = typeof r.clientId === 'string' && DISCORD_ID_RE.test(r.clientId.trim()) ? r.clientId.trim() : '';
+  return { enabled: r.enabled === true && !!clientId, clientId, showName: r.showName !== false };
 }
 
 function normalizeAutoBackup(v) {
@@ -370,12 +379,17 @@ function mergeSettings(patch) {
   const p = patch && typeof patch === 'object' ? patch : {};
   const bg = p.background && typeof p.background === 'object' ? p.background : {};
   const ab = p.autoBackup && typeof p.autoBackup === 'object' ? p.autoBackup : {};
+  const dc = p.discord && typeof p.discord === 'object' ? p.discord : {};
   return normalizeSettings({
     ...settings,
     ...Object.fromEntries(['heroBackground', 'theme', 'accent', 'glassAlpha', 'snow', 'garland', 'autostart', 'logging', 'javaPath', 'checkUpdates', 'closeAction', 'startMinimized'].filter((k) => k in p).map((k) => [k, p[k]])),
     background: {
       ...settings.background,
       ...Object.fromEntries(['mode', 'blur', 'dim'].filter((k) => k in bg).map((k) => [k, bg[k]])),
+    },
+    discord: {
+      ...settings.discord,
+      ...Object.fromEntries(['enabled', 'clientId', 'showName'].filter((k) => k in dc).map((k) => [k, dc[k]])),
     },
     // папку страница не меняет (её выбирает окно в главном процессе): из патча берём только расписание
     autoBackup: {
@@ -421,6 +435,7 @@ function afterSettingsChange(prev, next) {
   if (next.autostart !== prev.autostart) applyAutostart(next.autostart);
   if (prev.logging && !next.logging) writeLog('info', 'журнал выключен');
   if (!prev.logging && next.logging) writeLog('info', 'журнал включён');
+  if (JSON.stringify(next.discord) !== JSON.stringify(prev.discord)) presenceSync();
 }
 
 const extOf = (p) => path.extname(String(p || '')).slice(1).toLowerCase();
@@ -1049,10 +1064,25 @@ const profileView = () => ({ nickname: profile.nickname, created_at: profile.cre
 
 const sessions = new Map(); // id игры -> { start }
 
+/* Discord Rich Presence: показываем самую свежую из запущенных игр; когда игр нет или функция выключена, статус убирается. */
+const discord = createDiscord({ log: (level, msg) => logLine(level, msg) });
+
+function presenceSync() {
+  const d = settings.discord;
+  if (!d.enabled || !d.clientId) { discord.clear(); return; }
+  let last = null;
+  for (const [id, s] of sessions) if (!last || s.start > last.start) last = { id, start: s.start };
+  const g = last && games.find((x) => x.id === last.id);
+  if (!g) { discord.clear(); return; }
+  const details = d.showName ? `${String(g.name).slice(0, 100)}` : 'Играет в игру';
+  discord.set(d.clientId, { details: details.length >= 2 ? details : `${details} `, state: 'через ManyGameLib', start: last.start }).catch(() => {});
+}
+
 function trackSession(id, child) {
   if (!child || sessions.has(id)) return;   // одна сессия на игру, второй экземпляр не удваивает время
   sessions.set(id, { start: Date.now() });
   child.once('exit', () => endSession(id));
+  presenceSync();
 }
 
 function endSession(id) {
@@ -1061,6 +1091,7 @@ function endSession(id) {
   sessions.delete(id);
   addPlaytime(id, Math.round((Date.now() - s.start) / 1000), s.start);
   refreshTrayMenu();
+  presenceSync();
   const g = games.find((x) => x.id === id);
   if (g && win && !win.isDestroyed()) win.webContents.send('game-updated', view(g)); // снять «Играет»
 }
@@ -1335,6 +1366,8 @@ function registerHandlers() {
       await shell.openExternal(REPO_URL);
     } else if (target === 'sgdb_key') {
       await shell.openExternal('https://www.steamgriddb.com/profile/preferences/api');
+    } else if (target === 'discord_dev') {
+      await shell.openExternal('https://discord.com/developers/applications');
     } else if (target === 'release') {
       await shell.openExternal(`${REPO_URL}/releases/latest`);
     } else {
@@ -1389,6 +1422,9 @@ function registerHandlers() {
   /* ---------- Автокопии ---------- */
 
   handle('get_backup_info', () => backupInfo());
+
+  /* Состояние Discord: подключён ли и последняя ошибка (для страницы настроек). */
+  handle('get_discord_info', () => discord.status());
 
   /* Папку выбирает пользователь в окне главного процесса, страница путь не задаёт. */
   handle('set_backup_folder', async () => {
@@ -1946,6 +1982,6 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   // Игры продолжат работать после нашего выхода: время, прошедшее до него, сохраняем сейчас.
-  app.on('before-quit', () => { quitting = true; for (const id of [...sessions.keys()]) endSession(id); });
+  app.on('before-quit', () => { quitting = true; for (const id of [...sessions.keys()]) endSession(id); discord.clear(); });
   app.on('window-all-closed', () => app.quit());
 }

@@ -22,6 +22,7 @@ ManyGameLib is a small Electron app with three parts and one runtime dependency 
 | `updater.js` | main | Update check, download and install (loaded by `main.js`) |
 | `sgdb.js` | main | Cover search in SteamGridDB, the encrypted API key (loaded by `main.js`, see [Cover search](sgdb.md)) |
 | `history.js` | main | Journal of play sessions (`sessions.json`) and the profile statistics (loaded by `main.js`, see [Storage](storage.md)) |
+| `discord.js` | main | Discord Rich Presence over the local IPC pipe, no libraries (loaded by `main.js`, see [Settings](settings.md#discord-rich-presence)) |
 | `autobackup.js` | main | Names, listing, schedule check, writing and rotation of the automatic library copies (loaded by `main.js`, see [Settings](settings.md)) |
 | `achievements.js` | main | The built-in set of achievements and their conditions (loaded by `main.js`, see [Storage](storage.md)) |
 | `zip.js` | main | Reading and writing ZIP for library export and import (loaded by `main.js`, see [Moving the library](transfer.md)) |
@@ -41,7 +42,7 @@ The window is created with:
   `default-src 'self'; img-src 'self' data: https://*.steamgriddb.com; style-src 'self' 'unsafe-inline'; script-src 'self'`.
   Only the app's own scripts run (no inline scripts, no remote code). Images may come from the app, from `data:` URLs (game images are sent to the page as data URLs) or, for the cover search thumbnails only, from `steamgriddb.com` (see [Cover search](sgdb.md)).
 
-The window also cannot be navigated away or open new windows (`setWindowOpenHandler` and `will-navigate` block both). `open_external` accepts only the keywords `data`, `logs`, `repo`, `release` and `sgdb_key`, never a path or a URL, so the page cannot use it to open arbitrary files or links.
+The window also cannot be navigated away or open new windows (`setWindowOpenHandler` and `will-navigate` block both). `open_external` accepts only the keywords `data`, `logs`, `repo`, `release`, `sgdb_key` and `discord_dev`, never a path or a URL, so the page cannot use it to open arbitrary files or links.
 
 The page cannot read or write arbitrary files. File paths for games and images come from the native open-file dialog (`pick_file`), and the main process validates every path again before using it (existence, extension, size).
 
@@ -82,6 +83,7 @@ The preload script exposes `window.api` with seven members:
 | `list_trash` | none | The trash: `{ id, name, exe_path, deleted_at, playtime_sec }`, newest first |
 | `restore_game` | `{ id }` | The game view; takes the game out of the trash |
 | `delete_trash` | `{ id }` or none | The number of games deleted for good (one game, or the whole trash without `id`) |
+| `get_discord_info` | none | State of Discord Rich Presence: `{ connected, error }` (see [Settings](settings.md#discord-rich-presence)) |
 | `get_backup_info` | none | State of the automatic copies: `{ enabled, folder, everyDays, keep, count, last, error }` |
 | `set_backup_folder` | none | Opens the folder dialog and saves the choice; returns the state |
 | `clear_backup_folder` | none | Removes the folder and turns copies off |

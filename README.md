@@ -46,6 +46,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu. While a game is running, its button shows "Играет" and it cannot be started a second time.
+- **Discord Rich Presence (optional, off by default):** shows the game you are playing and the time in your Discord profile; needs your own Discord application ID (Settings → General).
 - **Planned games:** add a game without a file ("Пока нет файла игры"), keep it in the list with a "В планах" badge and filter, and bind the file later in "Изменить".
 - **Auto copies:** Settings → Library → "Автокопии библиотеки" saves a ZIP of the library to a folder you choose (a cloud folder or another drive) on a schedule and keeps the newest N files.
 - **Launch profiles:** a game can have up to 8 extra ways to start (own arguments, working folder, run as administrator), launched from the game menu as "Запустить: name".
