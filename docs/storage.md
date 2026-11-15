@@ -95,7 +95,7 @@ Simple changes (`toggle_favorite`, the `last_played` update after a launch) call
 
 `sessions.json` is an array of `{ id, name, start, sec }`: the game id, its name at that moment, the start time (ms) and the length in seconds. `history.js` appends an entry in `addPlaytime`, so exactly the sessions that count for playtime are recorded (60 seconds and longer, and only if the playtime was saved). The file holds at most 20 000 entries (the oldest are dropped) and is written like the library (temporary file, then rename). It is not trusted: bad entries are skipped, a damaged file is renamed to `sessions.corrupt-<date>.json` and the journal starts again; `games.json` is never affected. A failed write is only logged.
 
-`get_stats` builds the profile statistics from it: last 7 and 30 days (a session that crosses midnight is split between the days), a daily bar chart for 30 days, a top of games per period and day streaks. Time played before the journal existed is only in `playtime_sec` and shows in "all time". The journal is not part of the export.
+`get_stats` builds the profile statistics from it: last 7 and 30 days (a session that crosses midnight is split between the days), a daily bar chart for 30 days, a top of games per period and day streaks. Time played before the journal existed is only in `playtime_sec` and shows in "all time". The journal is not part of the export. `get_game_history` takes the entries of one game from the same journal (`gameStats()` in `history.js`).
 
 ## Profile
 

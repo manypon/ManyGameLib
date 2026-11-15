@@ -81,6 +81,7 @@ The preload script exposes `window.api` with seven members:
 | `list_trash` | none | The trash: `{ id, name, exe_path, deleted_at, playtime_sec }`, newest first |
 | `restore_game` | `{ id }` | The game view; takes the game out of the trash |
 | `delete_trash` | `{ id }` or none | The number of games deleted for good (one game, or the whole trash without `id`) |
+| `get_game_history` | `{ id }` | One game's journal for the "Об игре" window: session count, average and longest session, the last 10 sessions and 30 daily values (see [UI](ui.md)) |
 | `get_stats` | none | Statistics from the session journal: totals, last 7 and 30 days, 30 daily values, top games, streaks (see [Storage](storage.md#play-sessions)) |
 | `get_profile` | none | `{ nickname, created_at, has_avatar, avatar }`, the avatar as a data URL or `null` |
 | `set_nickname` | `{ nickname }` | The profile without the avatar data |

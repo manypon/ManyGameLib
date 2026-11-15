@@ -1794,6 +1794,7 @@ function openDetails(id) {
         ...((game.tags || []).length ? [h('dt', {}, 'Теги'), h('dd', { class: 'tag-row' }, (game.tags).map((t) => h('span', { class: 'tag-pill' }, t)))] : []),
         h('dt', {}, 'Избранное'),
         h('dd', {}, game.favorite ? 'Да' : 'Нет')),
+      h('div', { class: 'gh', id: 'gameHistory' }),
       h('div', { class: 'modal-actions split' },
         h('button', { class: 'btn danger small', type: 'button', onClick: () => { closeModal(); removeGame(game.id); } }, icon('trash'), 'Убрать'),
         h('div', { style: 'display:flex;gap:10px' },
@@ -1805,7 +1806,45 @@ function openDetails(id) {
           }, icon('star')),
           h('button', { class: 'btn primary small', type: 'button', 'data-launch-id': game.id, onClick: () => { closeModal(); launch(game.id); } },
             icon('play'), h('span', { class: 'btn-label' }, 'Запустить')))));
+    loadGameHistory(game.id);
   });
+}
+
+/* Блок «История сессий» в окне игры: итоги, график за 30 дней и последние сессии. Сбой журнала окно не ломает. */
+async function loadGameHistory(id) {
+  let hs;
+  try { hs = await invoke('get_game_history', { id }); } catch { return; }
+  const box = document.getElementById('gameHistory');
+  if (!box || !hs) return;   // окно успели закрыть
+  if (!hs.sessions) {
+    box.replaceChildren(h('div', { class: 'gh-title' }, 'История сессий'),
+      h('p', { class: 'pf-empty' }, 'Пока нет записанных сессий. Они появятся после игры через ManyGameLib.'));
+    return;
+  }
+  const max = Math.max(...hs.days.map((d) => d.sec), 1);
+  const stat = (label, value) => h('div', { class: 'gh-stat' }, h('b', {}, value), h('span', {}, label));
+  box.replaceChildren(
+    h('div', { class: 'gh-title' }, 'История сессий'),
+    h('div', { class: 'gh-stats' },
+      stat('сессий', String(hs.sessions)),
+      stat('в среднем', formatSession(hs.avg_sec)),
+      stat('самая долгая', formatSession(hs.longest_sec))),
+    h('div', { class: 'pf-chart gh-chart' }, hs.days.map((d) => h('div', {
+      class: 'pf-col', title: `${dayLabel(d.day)}: ${d.sec > 0 ? formatSession(d.sec) : 'не играли'}`,
+    }, h('i', { style: `height:${d.sec > 0 ? Math.max(4, Math.round((d.sec / max) * 100)) : 0}%` })))),
+    h('div', { class: 'pf-axis' }, h('span', {}, dayLabel(hs.days[0].day)), h('span', {}, 'сегодня')),
+    h('ul', { class: 'gh-list' }, hs.last.map((s) => h('li', {},
+      h('span', {}, new Date(s.start).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })),
+      h('b', {}, formatSession(s.sec))))));
+}
+
+/* Длительность одной сессии: «45 мин», «1 ч 20 мин». */
+function formatSession(sec) {
+  const m = Math.max(1, Math.round(sec / 60));
+  if (m < 60) return `${m} мин`;
+  const hh = Math.floor(m / 60);
+  const mm = m % 60;
+  return mm ? `${hh} ч ${mm} мин` : `${hh} ч`;
 }
 
 function confirmModal({ title, text, okLabel }) {

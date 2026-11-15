@@ -1494,6 +1494,9 @@ function registerHandlers() {
 
   handle('get_stats', () => history.stats(games));
 
+  /* Журнал одной игры (окно «Об игре»). Игра должна быть в библиотеке. */
+  handle('get_game_history', ({ id }) => { findGame(id); return history.gameStats(id); });
+
   handle('get_profile', () => ({ ...profileView(), avatar: readImage(profile.avatar, MAX_AVATAR_BYTES) }));
 
   /* Список достижений для страницы. seen: время прошлого просмотра (всё, что получено позже, это «Новое»). */

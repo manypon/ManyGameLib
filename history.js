@@ -139,7 +139,32 @@ function createHistory({ file, log = () => {} }) {
     };
   }
 
-  return { load, add, stats, size: () => list.length, entries: () => list.slice() };
+  /* Журнал одной игры для окна «Об игре»: число сессий, средняя и самая длинная, последние 10 сессий и дни за 30 суток. */
+  function gameStats(id, now = Date.now()) {
+    const mine = list.filter((e) => e.id === id);
+    const today = dayStartOf(now);
+    const first = addDays(today, -(CHART_DAYS - 1));
+    const days = [];
+    for (let i = 0; i < CHART_DAYS; i++) {
+      const from = addDays(first, i);
+      days.push({ day: dayKey(from), from, to: addDays(first, i + 1), sec: 0 });
+    }
+    for (const e of mine) {
+      if (e.start + e.sec * 1000 <= first) continue;
+      for (const d of days) d.sec += overlap(e, d.from, d.to) / 1000;
+    }
+    const total = mine.reduce((s, e) => s + e.sec, 0);
+    return {
+      sessions: mine.length,
+      total_sec: total,
+      avg_sec: mine.length ? Math.round(total / mine.length) : 0,
+      longest_sec: mine.reduce((m, e) => Math.max(m, e.sec), 0),
+      last: mine.slice().sort((x, y) => y.start - x.start).slice(0, 10).map((e) => ({ start: e.start, sec: e.sec })),
+      days: days.map((d) => ({ day: d.day, sec: Math.round(d.sec) })),
+    };
+  }
+
+  return { load, add, stats, gameStats, size: () => list.length, entries: () => list.slice() };
 }
 
 module.exports = { createHistory, cleanEntry, MAX_ENTRIES };
