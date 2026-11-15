@@ -9,6 +9,9 @@ const count = (ctx, name) => Number(ctx.counters[name]) || 0;
 const maxPlaytime = (ctx) => ctx.games.reduce((m, g) => Math.max(m, Number(g.playtime_sec) || 0), 0);
 const tagSet = (ctx) => new Set(ctx.games.flatMap((g) => (Array.isArray(g.tags) ? g.tags : []).map((t) => String(t).toLowerCase())));
 
+const withStatus = (ctx, st) => ctx.games.filter((g) => g.status === st).length;
+const withNote = (ctx, min) => ctx.games.filter((g) => typeof g.note === 'string' && g.note.trim().length >= min).length;
+
 const ACHIEVEMENTS = [
   // Библиотека
   { id: 'lib_1', group: 'Библиотека', title: 'Первая игра', desc: 'Добавьте игру в библиотеку', goal: 1, cur: (c) => c.games.length },
@@ -38,6 +41,14 @@ const ACHIEVEMENTS = [
   { id: 'fav_3', group: 'Порядок', title: 'Избранное', desc: 'Добавьте в избранное 3 игры', goal: 3, cur: (c) => c.games.filter((g) => g.favorite).length },
   { id: 'nick', group: 'Порядок', title: 'Знакомство', desc: 'Придумайте ник в профиле', goal: 1, cur: (c) => (c.profile.nickname ? 1 : 0) },
   { id: 'avatar', group: 'Порядок', title: 'Лицо профиля', desc: 'Поставьте аватар', goal: 1, cur: (c) => (c.profile.avatar ? 1 : 0) },
+  // Прохождение: статусы и заметки из формы игры
+  { id: 'st_playing', group: 'Прохождение', title: 'В процессе', desc: 'Поставьте игре статус «Играю»', goal: 1, cur: (c) => withStatus(c, 'playing') },
+  { id: 'st_1', group: 'Прохождение', title: 'Титры', desc: 'Пройдите первую игру: статус «Пройдена»', goal: 1, cur: (c) => withStatus(c, 'completed') },
+  { id: 'st_5', group: 'Прохождение', title: 'Пять финалов', desc: 'Пройдите 5 игр', goal: 5, cur: (c) => withStatus(c, 'completed') },
+  { id: 'st_25', group: 'Прохождение', title: 'Платина', desc: 'Пройдите 25 игр', goal: 25, cur: (c) => withStatus(c, 'completed') },
+  { id: 'note_1', group: 'Прохождение', title: 'Записная книжка', desc: 'Оставьте заметку к игре', goal: 1, cur: (c) => withNote(c, 1) },
+  { id: 'note_10', group: 'Прохождение', title: 'Дневник игрока', desc: 'Оставьте заметки к 10 играм', goal: 10, cur: (c) => withNote(c, 1) },
+  { id: 'note_long', group: 'Прохождение', title: 'Рецензент', desc: 'Напишите заметку длиннее 500 символов', goal: 1, cur: (c) => withNote(c, 500) },
   // Приложение
   { id: 'tray', group: 'Приложение', title: 'В трее', desc: 'Свернуть ManyGameLib в трей', goal: 1, cur: (c) => count(c, 'tray') },
   { id: 'export', group: 'Приложение', title: 'Запасной план', desc: 'Сохраните библиотеку в ZIP', goal: 1, cur: (c) => count(c, 'export') },

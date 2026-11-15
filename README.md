@@ -46,6 +46,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu. While a game is running, its button shows "Играет" and it cannot be started a second time.
+- **Completion achievements:** 7 new achievements for statuses and notes ("Титры", "Платина" and others), 35 in total.
 - **Session history per game:** the "Об игре" window shows the number of sessions, average and longest session, a 30-day chart and the last 10 sessions.
 - **Games in the tray menu:** while the app is in the tray, its icon menu lists the last 5 launched games; a click starts one.
 - **Tray:** the window's cross asks whether to hide the app to the tray or quit (with a "remember" checkbox, changeable in Settings). Autostart can open the app straight into the tray.
