@@ -32,6 +32,7 @@ const state = {
   update: null,         // состояние обновлений из updater.js (status, mode, version, progress, error)
   settings: null,       // настройки приложения (get_settings)
   trash: null,          // корзина (list_trash); null: загрузить заново
+  backup: null,         // состояние автокопий (get_backup_info); null: загрузить заново
   profile: null,        // профиль (get_profile): ник, аватар, дата начала
   stats: null,          // статистика (get_stats)
   ach: null,            // достижения (get_achievements): { items, seen }
@@ -1135,6 +1136,53 @@ async function transfer(kind) {
   render();
 }
 
+/* Автокопии библиотеки: папку выбирает главный процесс, здесь только расписание и кнопки. */
+let backupBusy = false;
+
+async function backupCommand(cmd) {
+  if (backupBusy) return;
+  backupBusy = true;
+  if (state.view === 'settings') render();
+  try { state.backup = await invoke(cmd); if (cmd === 'backup_now') toast('Копия сохранена'); }
+  catch (e) { toast(errText(e), 'error'); state.backup = await invoke('get_backup_info').catch(() => state.backup); }
+  backupBusy = false;
+  if (state.view === 'settings') render();
+}
+
+async function saveBackupPatch(patch) {
+  try {
+    state.settings = await invoke('save_settings', { patch: { autoBackup: patch } });
+    state.backup = await invoke('get_backup_info');
+  } catch (e) { toast(errText(e), 'error'); await loadSettings(); }
+  if (state.view === 'settings') render();
+}
+
+const BACKUP_EVERY = [[1, 'Каждый день'], [3, 'Раз в 3 дня'], [7, 'Раз в неделю'], [14, 'Раз в 2 недели'], [30, 'Раз в месяц']];
+
+function backupCard() {
+  if (state.backup === null) {
+    invoke('get_backup_info').then((b) => { state.backup = b; if (state.view === 'settings') render(); }).catch(() => { state.backup = { enabled: false, folder: '', everyDays: 7, keep: 5, count: 0, last: null, error: '' }; });
+    return settingsCard('Автокопии библиотеки', 'Загрузка…');
+  }
+  const b = state.backup;
+  const last = b.last ? `Последняя копия: ${formatDate(b.last)}, ${new Date(b.last).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}. Копий в папке: ${b.count}` : 'Копий в папке пока нет';
+  const every = h('select', { class: 'input s-select', onChange: (e) => saveBackupPatch({ everyDays: Number(e.target.value) }) },
+    BACKUP_EVERY.map(([v, label]) => h('option', { value: String(v), selected: b.everyDays === v }, label)));
+  return settingsCard('Автокопии библиотеки', 'Архив ZIP, как при экспорте, по расписанию в выбранную папку. Подойдёт папка облака или внешний диск',
+    settingRow('Папка для копий',
+      b.folder ? h('span', { class: 's-path', title: b.folder }, b.folder) : 'Не выбрана',
+      h('div', { class: 's-buttons' },
+        h('button', { class: 'btn ghost small', type: 'button', disabled: backupBusy, onClick: () => backupCommand('set_backup_folder') }, icon('folder'), b.folder ? 'Изменить…' : 'Выбрать…'),
+        b.folder && h('button', { class: 'btn ghost small', type: 'button', disabled: backupBusy, onClick: () => backupCommand('clear_backup_folder') }, 'Сбросить'))),
+    settingRow('Делать копии автоматически', 'Проверка при запуске и каждые полчаса, пока приложение открыто',
+      toggle(b.enabled, (v) => saveBackupPatch({ enabled: v }), !b.folder)),
+    b.folder && settingRow('Как часто', null, every),
+    b.folder && settingRow('Сколько копий хранить', 'Старые копии ManyGameLib-auto-… в этой папке удаляются, чужие файлы не трогаются',
+      slider({ min: 1, max: 30, value: b.keep, unit: '', onLive: () => {}, onSave: (n) => saveBackupPatch({ keep: n }) })),
+    b.folder && settingRow('Сделать копию сейчас', h('span', { class: b.error ? 's-bad' : '' }, b.error ? `Последняя попытка не удалась: ${b.error}` : last),
+      h('button', { class: 'btn ghost small', type: 'button', disabled: backupBusy || !state.games.length, onClick: () => backupCommand('backup_now') }, icon('folder'), 'Сделать копию')));
+}
+
 /* Корзина на вкладке «Библиотека»: вернуть игру или удалить окончательно. */
 function trashCard() {
   if (state.trash === null) {
@@ -1190,6 +1238,7 @@ function libraryPanel() {
         h('button', { class: 'btn ghost small', type: 'button', disabled: transferBusy || !total, onClick: () => transfer('export') }, icon('folder'), 'Экспортировать…')),
       settingRow('Импорт', 'Игры из архива добавляются к вашим, игры с тем же путём к файлу пропускаются. Открывайте только архивы, которым доверяете',
         h('button', { class: 'btn ghost small', type: 'button', disabled: transferBusy, onClick: () => transfer('import') }, icon('folder'), 'Импортировать…'))),
+    backupCard(),
     trashCard(),
     settingsCard('SteamGridDB', 'Поиск обложек, баннеров и логотипов в форме игры, кнопка «Найти в SteamGridDB»',
       sgdbRow()),

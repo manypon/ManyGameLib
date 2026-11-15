@@ -31,6 +31,7 @@
       "sgdb.js",
       "history.js",
       "achievements.js",
+      "autobackup.js",
       "ui/**/*",
       "build/**/*",
       "!build/afterPack.js"

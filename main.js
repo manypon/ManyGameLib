@@ -9,6 +9,7 @@ const { spawn, execFile } = require('child_process');
 const { createUpdater } = require('./updater');
 const { createSgdb } = require('./sgdb');
 const { createHistory } = require('./history');
+const autobackup = require('./autobackup');
 const { evaluate: evalAchievements, COUNTERS } = require('./achievements');
 
 const REPO_URL = 'https://github.com/manypon/ManyGameLib';
@@ -271,6 +272,7 @@ const SETTINGS_DEFAULTS = {
   checkUpdates: true,    // проверять наличие новой версии при запуске
   closeAction: 'ask',    // что делает крестик окна: ask (спросить), tray (в трей), quit (закрыть)
   startMinimized: false, // при автозапуске Windows открываться сразу в трее
+  autoBackup: { enabled: false, folder: '', everyDays: 7, keep: 5 }, // автокопии библиотеки (папку выбирает только главный процесс)
 };
 const CLOSE_ACTIONS = ['ask', 'tray', 'quit'];
 const toInt = (v, lo, hi, fallback) => {
@@ -309,6 +311,19 @@ function normalizeSettings(raw) {
     closeAction: CLOSE_ACTIONS.includes(r.closeAction) ? r.closeAction : d.closeAction,
     startMinimized: typeof r.startMinimized === 'boolean' ? r.startMinimized : d.startMinimized,
     javaPath: typeof r.javaPath === 'string' ? r.javaPath.trim().slice(0, 500) : d.javaPath,
+    autoBackup: normalizeAutoBackup(r.autoBackup),
+  };
+}
+
+function normalizeAutoBackup(v) {
+  const r = v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  const d = SETTINGS_DEFAULTS.autoBackup;
+  const folder = typeof r.folder === 'string' && path.isAbsolute(r.folder.trim()) ? r.folder.trim().slice(0, 500) : '';
+  return {
+    enabled: r.enabled === true && !!folder,   // без папки включать нечего
+    folder,
+    everyDays: autobackup.EVERY_DAYS.includes(Number(r.everyDays)) ? Number(r.everyDays) : d.everyDays,
+    keep: toInt(r.keep, autobackup.KEEP_MIN, autobackup.KEEP_MAX, d.keep),
   };
 }
 
@@ -354,12 +369,18 @@ function saveSettings(next) {
 function mergeSettings(patch) {
   const p = patch && typeof patch === 'object' ? patch : {};
   const bg = p.background && typeof p.background === 'object' ? p.background : {};
+  const ab = p.autoBackup && typeof p.autoBackup === 'object' ? p.autoBackup : {};
   return normalizeSettings({
     ...settings,
     ...Object.fromEntries(['heroBackground', 'theme', 'accent', 'glassAlpha', 'snow', 'garland', 'autostart', 'logging', 'javaPath', 'checkUpdates', 'closeAction', 'startMinimized'].filter((k) => k in p).map((k) => [k, p[k]])),
     background: {
       ...settings.background,
       ...Object.fromEntries(['mode', 'blur', 'dim'].filter((k) => k in bg).map((k) => [k, bg[k]])),
+    },
+    // папку страница не меняет (её выбирает окно в главном процессе): из патча берём только расписание
+    autoBackup: {
+      ...settings.autoBackup,
+      ...Object.fromEntries(['enabled', 'everyDays', 'keep'].filter((k) => k in ab).map((k) => [k, ab[k]])),
     },
   });
 }
@@ -1233,6 +1254,48 @@ async function launchGame(id, profileId) {
   return view(g);
 }
 
+/* ---------- Автокопии библиотеки ---------- */
+
+let backupError = '';      // последняя ошибка автокопии (для страницы настроек)
+let backupRunning = false;
+let backupFailedAt = 0;
+
+function backupInfo() {
+  const ab = settings.autoBackup;
+  const files = ab.folder ? autobackup.list(ab.folder) : [];
+  return { enabled: ab.enabled, folder: ab.folder, everyDays: ab.everyDays, keep: ab.keep, count: files.length, last: files.length ? files[0].mtime : null, error: backupError };
+}
+
+/* Делает копию и убирает лишние. manual: по кнопке, ошибки уходят странице; по расписанию только в журнал. */
+async function runAutoBackup(manual) {
+  const ab = settings.autoBackup;
+  if (backupRunning || !ab.folder) return;
+  if (!games.length) { if (manual) throw new Error('В библиотеке пока нет игр.'); return; }
+  backupRunning = true;
+  try {
+    const target = autobackup.write(ab.folder, buildExport());
+    const removed = autobackup.rotate(ab.folder, ab.keep);
+    backupError = '';
+    backupFailedAt = 0;
+    logLine('info', `автокопия: ${games.length} игр в ${target}${removed ? `, удалено старых: ${removed}` : ''}`);
+  } catch (e) {
+    backupError = e.message;
+    backupFailedAt = Date.now();
+    logLine('warn', `автокопия не сделана: ${e.message}`);
+    if (manual) throw new Error(`Не удалось сделать копию: ${e.message}`);
+  } finally {
+    backupRunning = false;
+  }
+}
+
+/* Проверка по расписанию: при старте и затем каждые 30 минут. После сбоя (диск не подключён и т.п.) пауза 6 часов, чтобы не сорить в журнале. */
+function backupTick() {
+  const ab = settings.autoBackup;
+  if (!ab.enabled || !ab.folder || !games.length) return;
+  if (backupFailedAt && Date.now() - backupFailedAt < 6 * 3600 * 1000) return;
+  if (autobackup.due(autobackup.list(ab.folder), ab.everyDays)) runAutoBackup(false).catch(() => {});
+}
+
 function registerHandlers() {
   handle('get_version', () => app.getVersion());
 
@@ -1317,6 +1380,32 @@ function registerHandlers() {
     afterSettingsChange(prev, settings);
     logLine('info', 'настройки сброшены');
     return settings;
+  });
+
+  /* ---------- Автокопии ---------- */
+
+  handle('get_backup_info', () => backupInfo());
+
+  /* Папку выбирает пользователь в окне главного процесса, страница путь не задаёт. */
+  handle('set_backup_folder', async () => {
+    const res = await dialog.showOpenDialog(win, { title: 'Папка для автокопий библиотеки', properties: ['openDirectory', 'createDirectory'] });
+    if (res.canceled || !res.filePaths.length) return backupInfo();
+    saveSettings(normalizeSettings({ ...settings, autoBackup: { ...settings.autoBackup, folder: res.filePaths[0] } }));
+    backupError = '';
+    logLine('info', 'папка автокопий выбрана');
+    return backupInfo();
+  });
+
+  handle('clear_backup_folder', () => {
+    saveSettings(normalizeSettings({ ...settings, autoBackup: { ...settings.autoBackup, folder: '', enabled: false } }));
+    backupError = '';
+    return backupInfo();
+  });
+
+  handle('backup_now', async () => {
+    if (!settings.autoBackup.folder) throw new Error('Сначала выберите папку для копий.');
+    await runAutoBackup(true);
+    return backupInfo();
   });
 
   /* Экспорт: окно «Сохранить как», ZIP пишется через временный файл. Путь выбирает пользователь, страница его не задаёт. */
@@ -1834,6 +1923,8 @@ if (!app.requestSingleInstanceLock()) {
     sgdb = createSgdb({ net, safeStorage, file: path.join(dataDir, 'secrets.json'), log: logLine });
     sgdb.cleanTmp(0);   // остатки скачанных картинок от прошлого запуска
     registerHandlers();
+    setTimeout(backupTick, 30 * 1000).unref();   // не мешаем старту
+    setInterval(backupTick, 30 * 60 * 1000).unref();
     // Автозапуск с включённой настройкой открывается сразу в трее (но не с важным сообщением о библиотеке).
     const startHidden = process.argv.includes(HIDDEN_FLAG) && settings.startMinimized && !libraryNotice;
     createWindow(startHidden);

@@ -46,6 +46,7 @@ If Electron fails to download (a 504 or other network error), you can assemble t
 - **Edit a game** at any time: name, file path, icon, banner, logo and top block settings (right-click a game, or "Details" then "Edit").
 - Keyboard: Tab moves between games, Enter launches, Space selects.
 - **Launching:** the Launch button, the play button on a tile (on hover), a double-click, or the right-click menu. While a game is running, its button shows "Играет" and it cannot be started a second time.
+- **Auto copies:** Settings → Library → "Автокопии библиотеки" saves a ZIP of the library to a folder you choose (a cloud folder or another drive) on a schedule and keeps the newest N files.
 - **Launch profiles:** a game can have up to 8 extra ways to start (own arguments, working folder, run as administrator), launched from the game menu as "Запустить: name".
 - **Completion achievements:** 7 new achievements for statuses and notes ("Титры", "Платина" and others), 35 in total.
 - **Session history per game:** the "Об игре" window shows the number of sessions, average and longest session, a 30-day chart and the last 10 sessions.

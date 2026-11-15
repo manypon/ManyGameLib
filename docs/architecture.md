@@ -22,6 +22,7 @@ ManyGameLib is a small Electron app with three parts and one runtime dependency 
 | `updater.js` | main | Update check, download and install (loaded by `main.js`) |
 | `sgdb.js` | main | Cover search in SteamGridDB, the encrypted API key (loaded by `main.js`, see [Cover search](sgdb.md)) |
 | `history.js` | main | Journal of play sessions (`sessions.json`) and the profile statistics (loaded by `main.js`, see [Storage](storage.md)) |
+| `autobackup.js` | main | Names, listing, schedule check, writing and rotation of the automatic library copies (loaded by `main.js`, see [Settings](settings.md)) |
 | `achievements.js` | main | The built-in set of achievements and their conditions (loaded by `main.js`, see [Storage](storage.md)) |
 | `zip.js` | main | Reading and writing ZIP for library export and import (loaded by `main.js`, see [Moving the library](transfer.md)) |
 | `main.js` | main | Library storage, backups, settings, logging, autostart, image copies, launching games, native dialogs, the window, the tray icon |
@@ -81,6 +82,10 @@ The preload script exposes `window.api` with seven members:
 | `list_trash` | none | The trash: `{ id, name, exe_path, deleted_at, playtime_sec }`, newest first |
 | `restore_game` | `{ id }` | The game view; takes the game out of the trash |
 | `delete_trash` | `{ id }` or none | The number of games deleted for good (one game, or the whole trash without `id`) |
+| `get_backup_info` | none | State of the automatic copies: `{ enabled, folder, everyDays, keep, count, last, error }` |
+| `set_backup_folder` | none | Opens the folder dialog and saves the choice; returns the state |
+| `clear_backup_folder` | none | Removes the folder and turns copies off |
+| `backup_now` | none | Makes a copy at once; returns the state |
 | `get_game_history` | `{ id }` | One game's journal for the "Об игре" window: session count, average and longest session, the last 10 sessions and 30 daily values (see [UI](ui.md)) |
 | `get_stats` | none | Statistics from the session journal: totals, last 7 and 30 days, 30 daily values, top games, streaks (see [Storage](storage.md#play-sessions)) |
 | `get_profile` | none | `{ nickname, created_at, has_avatar, avatar }`, the avatar as a data URL or `null` |

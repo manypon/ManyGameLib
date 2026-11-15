@@ -22,7 +22,8 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
   "javaPath": "",
   "checkUpdates": true,
   "closeAction": "ask",
-  "startMinimized": false
+  "startMinimized": false,
+  "autoBackup": { "enabled": false, "folder": "", "everyDays": 7, "keep": 5 }
 }
 ```
 
@@ -43,6 +44,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 | `checkUpdates` | `true` / `false` | `true` | Check GitHub for a newer version after startup (see [Updates](updates.md)) |
 | `closeAction` | `ask`, `tray`, `quit` | `ask` | What the window's cross does: ask, hide to the tray, or quit (see "Tray") |
 | `startMinimized` | `true` / `false` | `false` | When started by Windows autostart, open straight into the tray |
+| `autoBackup` | object | see below | Automatic library copies: `enabled` (off by default, can be on only with a folder), `folder` (an absolute path), `everyDays` (1, 3, 7, 14 or 30), `keep` (1 to 30 copies) |
 | `javaPath` | string up to 500 chars | `""` | A specific `javaw.exe` for `.jar` files; empty means "search automatically" |
 
 ## Reading, validating, saving
@@ -55,7 +57,7 @@ The Settings page (sidebar → Settings) controls the app background, the top bl
 - `background.file` is accepted only if it is a bare file name (`path.basename(x) === x`), so a hand-edited file cannot point outside `icons\`;
 - `mode: custom` without a file becomes `default`.
 
-**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `theme`, `accent`, `glassAlpha`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, and `background.mode/blur/dim`). The page can never set `background.file` directly; that field is changed only by `set_wallpaper` and `clear_wallpaper`.
+**`mergeSettings(patch)`** applies a partial change on top of the current settings. It copies only known keys (`heroBackground`, `theme`, `accent`, `glassAlpha`, `snow`, `garland`, `autostart`, `logging`, `javaPath`, `checkUpdates`, `closeAction`, `startMinimized`, `autoBackup.enabled/everyDays/keep`, and `background.mode/blur/dim`). The page can never set `background.file` or `autoBackup.folder` directly; they are changed only by `set_wallpaper` / `clear_wallpaper` and by `set_backup_folder` / `clear_backup_folder`, which open the folder dialog in the main process.
 
 **`saveSettings(next)`** writes `settings.json.tmp`, copies the current file to `settings.json.bak`, then renames the temporary file over the real one (with the same short retry on locked files as the library).
 
@@ -177,6 +179,18 @@ If the tray icon cannot be created, the window is not hidden (there would be no 
 **Open in the tray.** Autostart registers the app with the argument `--hidden`. If `startMinimized` is on and the argument is present, the window is created but not shown and the tray icon is placed at once. A normal start (shortcut, installer) always shows the window, and so does a start with the "library restored" notice. Copies registered by an older version have no argument; the startup check sees the mismatch and registers them again.
 
 **Reset.** `reset_settings` writes the defaults, removes the user's wallpaper file, applies the side effects (autostart off) and writes a log line. Games and the library are not touched.
+
+## Automatic library copies
+
+`autobackup.js` plus a few functions in `main.js` (`backupTick()`, `runAutoBackup()`, `backupInfo()`). Settings → Library → "Автокопии библиотеки".
+
+- **What is saved.** The same ZIP as the manual export (`buildExport()`, see [Transfer](transfer.md)), named `ManyGameLib-auto-YYYY-MM-DD-HHMM.zip` (local time), written through a `.tmp` file and renamed. It contains the game list with notes, statuses and launch profiles and all images, not settings, profile or session journal.
+- **When.** 30 seconds after the start and then every 30 minutes while the app is open, `backupTick()` checks: copies are on, a folder is set, the library is not empty and the newest `ManyGameLib-auto-*.zip` in the folder is older than `everyDays` (no copy yet counts as due). The time of the last copy is taken from the files themselves, nothing else is stored. After a failure (the disk is not connected, no rights) the next automatic try waits 6 hours so the log is not flooded; "Сделать копию" in the page tries at once.
+- **How many.** After each copy `rotate()` keeps the newest `keep` files of this pattern and deletes the rest. Other files in the folder (a manual export, the user's own files) are never read or deleted.
+- **Folder.** Chosen with `set_backup_folder` (a system dialog opened by the main process, like the other pickers), so the page cannot make the app write to a path of its choice. `clear_backup_folder` removes it and turns copies off.
+- **Commands.** `get_backup_info` returns `{ enabled, folder, everyDays, keep, count, last, error }`, `backup_now` makes a copy at once (errors are shown to the user), the schedule itself is changed with `save_settings { autoBackup: { enabled, everyDays, keep } }`.
+- **Not the same as** `backups/` in the data folder (one copy of `games.json` per start, see [Storage](storage.md)): that one protects against a damaged file, auto copies protect against losing the whole disk when the folder is on another drive or in a cloud folder.
+- The log gets `автокопия: N игр в <file>` and, on failure, a warning with the reason.
 
 ## The Settings page
 
